@@ -477,6 +477,10 @@ fun ChatScreen() {
                             shape = RoundedCornerShape(18.dp)
                         ) {
                             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                if (!mine && selected!!.isGroup && message.senderUsername.isNotBlank()) {
+                                    Text("@${message.senderUsername}", style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                                }
                                 when (message.type) {
                                     "image" -> if (!message.mediaUrl.isNullOrBlank()) {
                                         AsyncImage(message.mediaUrl, contentDescription = "Shared image",
