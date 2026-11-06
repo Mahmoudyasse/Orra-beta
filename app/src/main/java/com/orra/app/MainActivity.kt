@@ -72,7 +72,8 @@ fun OrraApp() {
     Scaffold(bottomBar = { NeonBar(selected) { selected = it } }) { inner ->
         Box(Modifier.fillMaxSize().padding(inner)) {
             Box(Modifier.fillMaxSize().statusBarsPadding()) {
-                if (selected == 2) DialerScreen()
+                if (selected == 1) CallsScreen()
+                else if (selected == 2) DialerScreen()
                 else if (selected == 3) ContactsScreen()
                 else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(tabs[selected].label + " — coming soon")
