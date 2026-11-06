@@ -46,14 +46,7 @@ fun CallsScreen() {
     var entries by remember { mutableStateOf(readOrraCallHistory(context)) }
     var query by remember { mutableStateOf("") }
     var showClearDialog by remember { mutableStateOf(false) }
-    var pendingCall by remember { mutableStateOf<Pair<String, String>?>(null) }
-    val callPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        val pending = pendingCall
-        pendingCall = null
-        if (granted && pending != null) placeOrraCall(context, pending.first, pending.second)
-    }
+    val startCall = rememberOrraCallAction()
     val filteredEntries = remember(entries, query) {
         if (query.isBlank()) entries
         else entries.filter {
@@ -137,12 +130,7 @@ fun CallsScreen() {
                             )
                         }
                         IconButton(onClick = {
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
-                                placeOrraCall(context, entry.name, entry.number)
-                            } else {
-                                pendingCall = entry.name to entry.number
-                                callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
-                            }
+                            startCall(entry.name, entry.number)
                         }) {
                             Icon(Icons.Default.Call, contentDescription = "Open dialer for ${entry.name}", tint = CallGreen)
                         }
