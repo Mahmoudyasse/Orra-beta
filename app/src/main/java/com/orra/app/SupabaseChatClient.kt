@@ -359,8 +359,7 @@ class SupabaseChatClient(
 
     fun uploadMedia(bucket: String, file: File, objectPath: String, mimeType: String): String {
         val safePath = objectPath.split("/").joinToString("/") { encode(it) }
-        val connection = URL(projectUrl.trimEnd('/') + "/storage/v1/object/" + bucket + "/" + safePath)
-            .openConnection() as HttpURLConnection
+        val connection = openHttp(URL(projectUrl.trimEnd('/') + "/storage/v1/object/" + bucket + "/" + safePath))
         try {
             connection.requestMethod = "POST"; connection.doOutput = true
             connection.connectTimeout = 30000; connection.readTimeout = 60000
