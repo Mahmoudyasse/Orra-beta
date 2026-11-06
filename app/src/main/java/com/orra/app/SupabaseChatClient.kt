@@ -12,7 +12,7 @@ import java.io.FileInputStream
 data class OrraChatUser(val id: String, val username: String)
 data class OrraChatConversation(
     val id: String, val username: String, val lastMessage: String,
-    val isGroup: Boolean = false, val memberCount: Int = 2
+    val isGroup: Boolean = false, val memberCount: Int = 2, val peerUserId: String? = null
 )
 data class OrraChatMessage(
     val id: String, val senderId: String, val body: String, val createdAt: String,
@@ -149,7 +149,7 @@ class SupabaseChatClient(
             val last = if (latestRow == null) "Start a conversation"
                 else if (latestRow.optBoolean("deleted_for_everyone")) "This message was deleted"
                 else latestRow.optString("body").ifBlank { "Attachment" }
-            result.add(OrraChatConversation(conversationId, username, last, isGroup, members.length()))
+            result.add(OrraChatConversation(conversationId, username, last, isGroup, members.length(), otherId.takeIf { it.isNotBlank() }))
         }
         return result
     }
@@ -170,7 +170,7 @@ class SupabaseChatClient(
             OrraChatMessage(row.optString("id"), row.optString("sender_id"),
                 if (deleted) "This message was deleted" else row.optString("body"),
                 row.optString("created_at"), row.optString("message_type", "text"),
-                row.optString("media_url").takeIf { it.isNotBlank() },
+                row.optString("media_url").takeIf { it.isNotBlank() }?.let { createSignedMediaUrl("orra-chat-media", it) },
                 row.optString("edited_at").takeIf { it.isNotBlank() }, deleted)
         }
     }
@@ -221,8 +221,8 @@ class SupabaseChatClient(
         val row = rows.optJSONObject(0) ?: throw IllegalStateException("Profile not found.")
         return OrraChatProfile(row.optString("username"),
             row.optString("display_name").ifBlank { row.optString("username") },
-            row.optString("bio"), row.optString("avatar_url").takeIf { it.isNotBlank() },
-            row.optString("cover_url").takeIf { it.isNotBlank() })
+            row.optString("bio"), row.optString("avatar_url").takeIf { it.isNotBlank() }?.let { createSignedMediaUrl("orra-profiles", it) },
+            row.optString("cover_url").takeIf { it.isNotBlank() }?.let { createSignedMediaUrl("orra-profiles", it) })
     }
 
     fun blockUser(userId: String) {
