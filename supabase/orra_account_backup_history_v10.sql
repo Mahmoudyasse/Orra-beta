@@ -118,7 +118,8 @@ begin
     'format','orra-chat-backup-v1','created_at',now(),
     'conversations',coalesce((select jsonb_agg(to_jsonb(c) order by c.created_at)
       from public.conversations c join public.conversation_members cm on cm.conversation_id=c.id where cm.user_id=caller),'[]'::jsonb),
-    'memberships',coalesce((select jsonb_agg(to_jsonb(cm)) from public.conversation_members cm where cm.user_id=caller),'[]'::jsonb),
+    'memberships',coalesce((select jsonb_agg(to_jsonb(cm)) from public.conversation_members cm
+      where cm.conversation_id in (select cm2.conversation_id from public.conversation_members cm2 where cm2.user_id=caller)),'[]'::jsonb),
     'messages',coalesce((select jsonb_agg(to_jsonb(m) order by m.created_at)
       from public.messages m join public.conversation_members cm on cm.conversation_id=m.conversation_id where cm.user_id=caller),'[]'::jsonb),
     'message_events',coalesce((select jsonb_agg(to_jsonb(e) order by e.created_at)
@@ -160,8 +161,9 @@ begin
   on conflict(id) do nothing;
 
   insert into public.conversation_members(conversation_id,user_id,joined_at)
-  select (v->>'id')::uuid,caller,now()
-  from jsonb_array_elements(coalesce(saved->'conversations','[]'::jsonb)) v
+  select (v->>'conversation_id')::uuid,(v->>'user_id')::uuid,
+    coalesce((v->>'joined_at')::timestamptz,now())
+  from jsonb_array_elements(coalesce(saved->'memberships','[]'::jsonb)) v
   on conflict(conversation_id,user_id) do nothing;
 
   insert into public.messages(id,conversation_id,sender_id,body,created_at,message_type,media_url,edited_at,deleted_for_everyone,reply_to)
