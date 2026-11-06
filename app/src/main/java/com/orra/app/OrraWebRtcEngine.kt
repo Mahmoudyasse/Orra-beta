@@ -41,7 +41,7 @@ class OrraWebRtcEngine(
         videoTrack?.let { track -> local?.let(track::addSink) }
     }
 
-    fun start() {
+    fun start(configuredIceServers: List<PeerConnection.IceServer> = emptyList()) {
         try {
             PeerConnectionFactory.initialize(
                 PeerConnectionFactory.InitializationOptions.builder(context).createInitializationOptions()
@@ -52,9 +52,9 @@ class OrraWebRtcEngine(
                 .setVideoEncoderFactory(DefaultVideoEncoderFactory(egl.eglBaseContext, true, true))
                 .setVideoDecoderFactory(DefaultVideoDecoderFactory(egl.eglBaseContext))
                 .createPeerConnectionFactory()
-            val iceServers = listOf(
-                PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
-            )
+            val iceServers = configuredIceServers.ifEmpty {
+                listOf(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer())
+            }
             peer = factory?.createPeerConnection(PeerConnection.RTCConfiguration(iceServers), observer)
                 ?: error("Could not create WebRTC peer connection.")
             val constraints = MediaConstraints()
