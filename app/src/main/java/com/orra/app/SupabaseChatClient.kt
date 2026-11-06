@@ -335,4 +335,18 @@ class SupabaseChatClient(
             .put("message_type", type).put("media_url", mediaPath))
     }
 
+    fun sendLocationMessage(conversationId: String, latitude: String, longitude: String) {
+        val uid = currentUserId ?: throw IllegalStateException("Sign in again.")
+        val body = "Latitude: $latitude\nLongitude: $longitude"
+        request("/rest/v1/messages", "POST", JSONObject().put("conversation_id", conversationId)
+            .put("sender_id", uid).put("body", body).put("message_type", "location"))
+    }
+
+    fun sendContactCard(conversationId: String, name: String, phone: String) {
+        val uid = currentUserId ?: throw IllegalStateException("Sign in again.")
+        val body = "$name\n$phone"
+        request("/rest/v1/messages", "POST", JSONObject().put("conversation_id", conversationId)
+            .put("sender_id", uid).put("body", body).put("message_type", "contact"))
+    }
+
 }
