@@ -209,7 +209,6 @@ fun SettingsScreen() {
                     if (proxyType == "socks") Button(onClick = { proxyType = "socks" }) { Text("SOCKS") }
                     else OutlinedButton(onClick = { proxyType = "socks" }) { Text("SOCKS") }
                 }
-                if (proxyStatus.isNotBlank()) Text(proxyStatus, style = MaterialTheme.typography.bodySmall)
                 Button(enabled = !proxyBusy, modifier = Modifier.fillMaxWidth(), onClick = {
                     val port = proxyPort.toIntOrNull()
                     if (proxyEnabled && (proxyHost.isBlank() || port == null || port !in 1..65535)) {
@@ -244,7 +243,6 @@ fun SettingsScreen() {
                 Text("Account & chat backup", fontWeight = FontWeight.SemiBold)
                 Text("Your ORRA account and chats are stored in the connected server. A private chat snapshot is created daily when you open Chats. Media files remain in the private storage bucket.",
                     style = MaterialTheme.typography.bodySmall)
-                if (backupStatus.isNotBlank()) Text(backupStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 Button(enabled = backupClient != null && !backupBusy, onClick = {
                     scope.launch {
                         backupBusy = true
@@ -309,7 +307,6 @@ fun SettingsScreen() {
                         }.onFailure { android.util.Log.w("ORRA", "Blocked contacts load failed", it); blockedStatus = "" }
                     }
                 }) { Text("Blocked contacts") }
-                if (blockedStatus.isNotBlank()) Text(blockedStatus, style = MaterialTheme.typography.bodySmall)
 
             }
         }
@@ -336,7 +333,6 @@ fun SettingsScreen() {
                             }) { Text("Unblock") }
                         }
                     }
-                    if (blockedStatus.isNotBlank()) Text(blockedStatus, style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = { TextButton(onClick = { showBlocked = false }) { Text("Close") } }
