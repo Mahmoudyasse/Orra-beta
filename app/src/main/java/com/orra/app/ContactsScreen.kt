@@ -118,6 +118,11 @@ fun ContactsScreen() {
         }
     }
 
+    val filteredContacts = contacts.filter {
+        (!showFavorites || favoriteNumbers.contains(it.number)) &&
+            (it.name.contains(search, ignoreCase = true) || it.number.contains(search))
+    }
+
     Column(
         Modifier.fillMaxSize().padding(start = 18.dp, end = 18.dp, top = 58.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -173,12 +178,11 @@ fun ContactsScreen() {
                 contacts.isEmpty() -> Text("No contacts with phone numbers were found.")
                 showFavorites && contacts.none { favoriteNumbers.contains(it.number) } ->
                     Text("No favorite contacts yet. Tap the star beside a contact to add one.")
+                filteredContacts.isEmpty() ->
+                    Text("No matching contacts.")
                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(
-                        contacts.filter {
-                            (!showFavorites || favoriteNumbers.contains(it.number)) &&
-                                (it.name.contains(search, ignoreCase = true) || it.number.contains(search))
-                        },
+                        filteredContacts,
                         key = { it.number }
                     ) { contact ->
                         Row(
