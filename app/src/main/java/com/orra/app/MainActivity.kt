@@ -133,7 +133,7 @@ fun OrraApp() {
     LaunchedEffect(Unit) {
         val prefs = context.getSharedPreferences(SupabaseChatClient.PREFS, android.content.Context.MODE_PRIVATE)
         while (isActive) {
-            if (OrraInternetCallState.callId == null) {
+            if (OrraInternetCallState.callId == null && OrraCallState.activeCall == null) {
                 val userId = prefs.getString("user_id", "").orEmpty()
                 val token = prefs.getString("token", "").orEmpty()
                 if (userId.isNotBlank() && token.isNotBlank()) {
@@ -180,7 +180,7 @@ fun OrraApp() {
         }
     }
     val pendingCall = incomingCall
-    if (pendingCall != null && OrraInternetCallState.callId == null) {
+    if (pendingCall != null && OrraInternetCallState.callId == null && OrraCallState.activeCall == null) {
         val prefs = context.getSharedPreferences(SupabaseChatClient.PREFS, android.content.Context.MODE_PRIVATE)
         val userId = prefs.getString("user_id", "").orEmpty()
         val token = prefs.getString("token", "").orEmpty()
