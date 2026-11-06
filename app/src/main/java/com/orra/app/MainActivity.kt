@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         OrraAppearance.load(this)
+        consumeAuthCallback(intent)
         setContent { OrraTheme { if (OrraCallState.activeCall != null) InCallScreen() else OrraApp() } }
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
