@@ -137,6 +137,7 @@ fun ChatScreen() {
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     val recorder = remember { OrraVoiceRecorder(context.cacheDir) }
     val startCellularCall = rememberOrraCallAction()
+    val startCarrierVideoCall = rememberOrraCallAction(video = true)
     val configured = projectUrl.startsWith("https://") && publishableKey.isNotBlank()
     val signedIn = token.isNotBlank() && userId.isNotBlank()
     val client = remember(projectUrl, publishableKey, token, userId) {
@@ -413,8 +414,12 @@ fun ChatScreen() {
                     }) {
                         Icon(Icons.Default.Call, contentDescription = "Voice call")
                     }
-                    IconButton(onClick = { error = "Video calling needs WebRTC signaling and TURN server credentials. Camera preview is not a video call." }) {
-                        Icon(Icons.Default.Videocam, contentDescription = "Video call")
+                    IconButton(onClick = {
+                        val number = selected!!.peerPhone
+                        if (number.isNullOrBlank()) error = "This user has not added a phone number to their ORRA profile."
+                        else startCarrierVideoCall(selected!!.username, number)
+                    }) {
+                        Icon(Icons.Default.Videocam, contentDescription = "Carrier video call")
                     }
                 } else {
                     IconButton(onClick = { addingToGroup = selected; showGroup = true; selectedUsers = emptySet() }) {
