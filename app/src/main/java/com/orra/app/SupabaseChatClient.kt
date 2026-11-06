@@ -50,6 +50,9 @@ class SupabaseChatClient(
         }
     }
 
+    private val signedUrlCache = mutableMapOf<String, Pair<String, Long>>()
+    private val senderNameCache = mutableMapOf<String, String>()
+
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
     private fun request(path: String, method: String = "GET", body: JSONObject? = null, authenticated: Boolean = true): String {
@@ -166,8 +169,14 @@ class SupabaseChatClient(
         val senderIds = (0 until rows.length()).mapNotNull { rows.optJSONObject(it)?.optString("sender_id") }.distinct()
         val senderNames = mutableMapOf<String, String>()
         senderIds.forEach { senderId ->
-            val profileRows = JSONArray(request("/rest/v1/profiles?select=username&id=eq." + encode(senderId) + "&limit=1"))
-            senderNames[senderId] = profileRows.optJSONObject(0)?.optString("username").orEmpty()
+            val cachedName = synchronized(senderNameCache) { senderNameCache[senderId] }
+            val resolvedName = cachedName ?: run {
+                val profileRows = JSONArray(request("/rest/v1/profiles?select=username&id=eq." + encode(senderId) + "&limit=1"))
+                profileRows.optJSONObject(0)?.optString("username").orEmpty().also { name ->
+                    synchronized(senderNameCache) { senderNameCache[senderId] = name }
+                }
+            }
+            senderNames[senderId] = resolvedName
         }
         return (0 until rows.length()).mapNotNull { i ->
             val row = rows.optJSONObject(i) ?: return@mapNotNull null
@@ -304,10 +313,19 @@ class SupabaseChatClient(
     }
 
     fun createSignedMediaUrl(bucket: String, objectPath: String): String {
+        val cacheKey = "$bucket/$objectPath"
+        val now = System.currentTimeMillis()
+        synchronized(signedUrlCache) {
+            signedUrlCache[cacheKey]?.let { cached ->
+                if (cached.second > now + 60000L) return cached.first
+            }
+        }
         val response = JSONObject(request("/storage/v1/object/sign/" + bucket + "/" +
             objectPath.split("/").joinToString("/") { encode(it) }, "POST", JSONObject().put("expiresIn", 3600)))
         val signed = response.optString("signedURL")
-        return if (signed.startsWith("http")) signed else projectUrl.trimEnd('/') + signed
+        val fullUrl = if (signed.startsWith("http")) signed else projectUrl.trimEnd('/') + signed
+        synchronized(signedUrlCache) { signedUrlCache[cacheKey] = fullUrl to (now + 3300000L) }
+        return fullUrl
     }
 
     fun sendAttachment(conversationId: String, caption: String, type: String, mediaPath: String) {
