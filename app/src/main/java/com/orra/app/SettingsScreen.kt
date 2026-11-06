@@ -122,6 +122,36 @@ fun SettingsScreen() {
         }
 
         Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Share ORRA", fontWeight = FontWeight.SemiBold)
+                Text("Invite someone to install the ORRA beta app.", style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = {
+                    val intent = Intent(Intent.ACTION_SEND).setType("text/plain")
+                        .putExtra(Intent.EXTRA_TEXT, "Try ORRA Beta: https://github.com/Mahmoudyasse/Orra-beta")
+                    context.startActivity(Intent.createChooser(intent, "Share ORRA"))
+                }, modifier = Modifier.fillMaxWidth()) { Text("Share app") }
+            }
+        }
+
+        Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Icon(Icons.Default.Info, contentDescription = null)
+                    Text("  About ORRA", fontWeight = FontWeight.SemiBold)
+                }
+                Text("ORRA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("DEVELOPER  /  HAMOUDY YASSER", fontWeight = FontWeight.SemiBold, color = OrraAppearance.accentColor(), letterSpacing = 1.1.sp)
+                Text("Version 0.5.0-beta")
+                Text("Built with Kotlin, Jetpack Compose, Android Telecom and Supabase.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                Text("ORRA is an independent beta app and is not affiliated with WhatsApp or Apple.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            }
+        }
+
+
+
+        Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Connection proxy", fontWeight = FontWeight.SemiBold)
                 Text("Routes ORRA's Supabase API requests through this proxy. It does not route Android phone calls or every third-party connection.",
@@ -246,33 +276,7 @@ fun SettingsScreen() {
             }
         }
 
-        Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Share ORRA", fontWeight = FontWeight.SemiBold)
-                Text("Invite someone to install the ORRA beta app.", style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(onClick = {
-                    val intent = Intent(Intent.ACTION_SEND).setType("text/plain")
-                        .putExtra(Intent.EXTRA_TEXT, "Try ORRA Beta: https://github.com/Mahmoudyasse/Orra-beta")
-                    context.startActivity(Intent.createChooser(intent, "Share ORRA"))
-                }, modifier = Modifier.fillMaxWidth()) { Text("Share app") }
-            }
-        }
 
-        Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.Icon(Icons.Default.Info, contentDescription = null)
-                    Text("  About ORRA", fontWeight = FontWeight.SemiBold)
-                }
-                Text("ORRA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Text("DEVELOPER  /  HAMOUDY YASSER", fontWeight = FontWeight.SemiBold, color = OrraAppearance.accentColor(), letterSpacing = 1.1.sp)
-                Text("Version 0.5.0-beta")
-                Text("Built with Kotlin, Jetpack Compose, Android Telecom and Supabase.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
-                Text("ORRA is an independent beta app and is not affiliated with WhatsApp or Apple.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-            }
-        }
     }
     if (showBlocked) {
         AlertDialog(
