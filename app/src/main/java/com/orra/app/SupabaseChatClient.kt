@@ -19,6 +19,7 @@ data class OrraChatMessage(
     val type: String = "text", val mediaUrl: String? = null, val editedAt: String? = null,
     val deletedForEveryone: Boolean = false, val senderUsername: String = ""
 )
+data class OrraUserPresence(val userId: String, val online: Boolean, val dnd: Boolean, val typing: Boolean, val lastSeen: String)
 data class OrraChatProfile(
     val username: String, val displayName: String, val bio: String, val phoneNumber: String,
     val avatarUrl: String?, val coverUrl: String?
@@ -249,6 +250,50 @@ class SupabaseChatClient(
     fun unblockUser(userId: String) {
         request("/rest/v1/blocked_users?blocker_id=eq." + encode(currentUserId.orEmpty()) +
             "&blocked_id=eq." + encode(userId), "DELETE")
+    }
+
+    fun updatePresence(online: Boolean, dnd: Boolean, typing: Boolean, conversationId: String? = null) {
+        val uid = currentUserId ?: return
+        val body = JSONObject()
+            .put("user_id", uid)
+            .put("is_online", online)
+            .put("is_dnd", dnd)
+            .put("is_typing", typing)
+            .put("typing_conversation", conversationId ?: JSONObject.NULL)
+            .put("last_seen", java.time.Instant.now().toString())
+        val connection = URL(projectUrl.trimEnd('/') + "/rest/v1/user_presence?on_conflict=user_id")
+            .openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.connectTimeout = 12000
+            connection.readTimeout = 12000
+            connection.setRequestProperty("apikey", publishableKey)
+            connection.setRequestProperty("Authorization", "Bearer " + accessToken.orEmpty())
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("Prefer", "resolution=merge-duplicates,return=minimal")
+            connection.outputStream.use { it.write(JSONArray().put(body).toString().toByteArray(Charsets.UTF_8)) }
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                val detail = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                throw IllegalStateException("Presence update failed ($code): " + detail.take(180))
+            }
+        } finally { connection.disconnect() }
+    }
+
+    fun loadPresence(userIds: List<String>): Map<String, OrraUserPresence> {
+        val ids = userIds.filter { it.isNotBlank() }.distinct()
+        if (ids.isEmpty()) return emptyMap()
+        val rows = JSONArray(request("/rest/v1/user_presence?select=user_id,is_online,is_dnd,is_typing,last_seen&user_id=in.(" +
+            ids.joinToString(",") + ")"))
+        return buildMap {
+            for (i in 0 until rows.length()) {
+                val row = rows.optJSONObject(i) ?: continue
+                val id = row.optString("user_id")
+                put(id, OrraUserPresence(id, row.optBoolean("is_online"), row.optBoolean("is_dnd"),
+                    row.optBoolean("is_typing"), row.optString("last_seen")))
+            }
+        }
     }
 
     fun setConversationMuted(conversationId: String, muted: Boolean) {
