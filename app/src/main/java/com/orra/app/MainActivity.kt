@@ -22,11 +22,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -68,9 +66,7 @@ private val tabs = listOf(
     Tab("Calls", Icons.Filled.Call, GlowCalls),
     Tab("Keypad", Icons.Filled.Phone, GlowKeypad),
     Tab("Contacts", Icons.Filled.Person, GlowContacts),
-    Tab("Settings", Icons.Filled.Settings, GlowSettings),
-    Tab("Voice", Icons.Filled.Mic, GlowKeypad),
-    Tab("Video", Icons.Filled.Videocam, GlowChats)
+    Tab("Settings", Icons.Filled.Settings, GlowSettings)
 )
 
 @Composable
@@ -99,10 +95,6 @@ fun OrraApp() {
                 else if (selected == 2) DialerScreen()
                 else if (selected == 3) ContactsScreen()
                 else if (selected == 4) SettingsScreen()
-                else if (selected == 5) VoiceIsolationScreen()
-                else if (selected == 6) CameraScreen()
-                else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(tabs[selected].label + " — coming soon")
                 }
             }
             Box(
