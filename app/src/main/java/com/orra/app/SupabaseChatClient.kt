@@ -126,22 +126,30 @@ class SupabaseChatClient(
         for (i in 0 until memberships.length()) {
             val conversationId = memberships.optJSONObject(i)?.optString("conversation_id").orEmpty()
             if (conversationId.isBlank()) continue
+            val conversationRows = JSONArray(request(
+                "/rest/v1/conversations?select=title,is_group&id=eq." + encode(conversationId) + "&limit=1"
+            ))
+            val conversationRow = conversationRows.optJSONObject(0)
+            val isGroup = conversationRow?.optBoolean("is_group") ?: false
             val members = JSONArray(request(
-                "/rest/v1/conversation_members?select=user_id&conversation_id=eq." +
-                    encode(conversationId) + "&user_id=neq." + encode(uid) + "&limit=1"
+                "/rest/v1/conversation_members?select=user_id&conversation_id=eq." + encode(conversationId)
             ))
-            val otherId = members.optJSONObject(0)?.optString("user_id").orEmpty()
-            if (otherId.isBlank()) continue
-            val profiles = JSONArray(request(
+            val otherId = (0 until members.length()).mapNotNull { members.optJSONObject(it)?.optString("user_id") }
+                .firstOrNull { it != uid }.orEmpty()
+            val profiles = if (otherId.isNotBlank()) JSONArray(request(
                 "/rest/v1/profiles?select=username&id=eq." + encode(otherId) + "&limit=1"
-            ))
-            val username = profiles.optJSONObject(0)?.optString("username") ?: "User"
+            )) else JSONArray()
+            val username = if (isGroup) conversationRow?.optString("title").orEmpty().ifBlank { "Group" }
+                else profiles.optJSONObject(0)?.optString("username") ?: "User"
             val latest = JSONArray(request(
-                "/rest/v1/messages?select=body&conversation_id=eq." + encode(conversationId) +
+                "/rest/v1/messages?select=body,message_type,deleted_for_everyone&conversation_id=eq." + encode(conversationId) +
                     "&order=created_at.desc&limit=1"
             ))
-            val last = latest.optJSONObject(0)?.optString("body") ?: "Start a conversation"
-            result.add(OrraChatConversation(conversationId, username, last))
+            val latestRow = latest.optJSONObject(0)
+            val last = if (latestRow == null) "Start a conversation"
+                else if (latestRow.optBoolean("deleted_for_everyone")) "This message was deleted"
+                else latestRow.optString("body").ifBlank { "Attachment" }
+            result.add(OrraChatConversation(conversationId, username, last, isGroup, members.length()))
         }
         return result
     }
