@@ -3,6 +3,7 @@ package com.orra.app
 import android.content.Context
 import android.view.View
 import org.webrtc.*
+import org.webrtc.audio.JavaAudioDeviceModule
 
 class OrraWebRtcEngine(
     private val context: Context,
@@ -208,7 +209,8 @@ class OrraWebRtcEngine(
 
     fun release() {
         runCatching { capturer?.stopCapture() }
-        runCatching { videoTrack?.let { localRenderer?.removeSink(it) } }
+        runCatching { videoTrack?.let { track -> localRenderer?.let(track::removeSink) } }
+        runCatching { videoTrack?.let { track -> remoteRenderer?.let(track::removeSink) } }
         runCatching { remoteRenderer?.release() }
         runCatching { localRenderer?.release() }
         runCatching { peer?.close() }
