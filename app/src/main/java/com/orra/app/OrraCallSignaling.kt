@@ -92,12 +92,11 @@ class OrraCallSignaling(
 
     fun updateStatus(callId: String, status: String) {
         require(status in setOf("accepted", "rejected", "ended", "missed"))
-        if (status in setOf("rejected", "ended", "missed")) {
-            request("/rest/v1/rpc/orra_finish_call", "POST",
+        when (status) {
+            "accepted" -> request("/rest/v1/rpc/orra_accept_call", "POST",
+                JSONObject().put("target_call", callId))
+            "rejected", "ended", "missed" -> request("/rest/v1/rpc/orra_finish_call", "POST",
                 JSONObject().put("target_call", callId).put("final_status", status))
-        } else {
-            request("/rest/v1/orra_call_sessions?id=eq.${enc(callId)}", "PATCH",
-                JSONObject().put("status", status).put("updated_at", java.time.Instant.now().toString()))
         }
     }
 
