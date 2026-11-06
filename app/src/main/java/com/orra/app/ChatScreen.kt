@@ -384,7 +384,15 @@ fun ChatScreen() {
                         presenceByUser = withContext(Dispatchers.IO) {
                             client.loadPresence(loaded.mapNotNull { it.peerUserId })
                         }
-                    } else messages = withContext(Dispatchers.IO) { client.loadMessages(selected!!.id) }
+                    } else {
+                        val activeConversation = selected!!
+                        messages = withContext(Dispatchers.IO) { client.loadMessages(activeConversation.id) }
+                        runCatching {
+                            withContext(Dispatchers.IO) { client.markConversationDelivered(activeConversation.id) }
+                            delay(450)
+                            withContext(Dispatchers.IO) { client.markConversationRead(activeConversation.id) }
+                        }
+                    }
                 } catch (e: Exception) { error = e.message ?: "Could not refresh chats." }
                 delay(3500)
             }
