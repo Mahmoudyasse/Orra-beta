@@ -73,6 +73,21 @@ $$;
 grant execute on function public.orra_mark_conversation_delivered(uuid) to authenticated;
 grant execute on function public.orra_mark_conversation_read(uuid) to authenticated;
 
+-- Permit common office and text document formats in the private attachment bucket.
+update storage.buckets
+set allowed_mime_types = array[
+  'image/jpeg','image/png','image/webp',
+  'audio/wav','audio/mpeg','audio/mp4','audio/3gpp',
+  'video/mp4','application/pdf','text/plain','text/csv','application/zip',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+]
+where id='orra-chat-media';
+
 -- Only the intended recipient may accept a ringing call; call participants cannot rewrite identities.
 revoke update on public.orra_call_sessions from authenticated;
 drop policy if exists "Participants update ORRA calls" on public.orra_call_sessions;
