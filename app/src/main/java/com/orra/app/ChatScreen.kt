@@ -182,6 +182,9 @@ fun ChatScreen() {
     var displayName by remember { mutableStateOf("") }
     var bio by remember { mutableStateOf("") }
     var phoneNumber by remember { mutableStateOf("") }
+    var phoneOtpPending by remember { mutableStateOf(false) }
+    var phoneOtpCode by remember { mutableStateOf("") }
+    var phoneStatus by remember { mutableStateOf("") }
     var newAvatarPath by remember { mutableStateOf<String?>(null) }
     var newCoverPath by remember { mutableStateOf<String?>(null) }
     var avatarPreview by remember { mutableStateOf<String?>(null) }
@@ -1040,19 +1043,56 @@ fun ChatScreen() {
                         Modifier.size(72.dp).clip(CircleShape))
                     OutlinedTextField(displayName, { displayName = it }, label = { Text("Display name") }, singleLine = true)
                     OutlinedTextField(bio, { bio = it }, label = { Text("About") }, maxLines = 3)
-                    OutlinedTextField(phoneNumber, { phoneNumber = it }, label = { Text("Phone number for SIM calls") }, singleLine = true)
+                    OutlinedTextField(phoneNumber, { phoneNumber = it }, label = { Text("Verified phone number for SIM calls") }, singleLine = true)
+                    Text("A phone number is discoverable by other ORRA users only after its SMS code is verified.",
+                        style = MaterialTheme.typography.bodySmall)
+                    if (phoneNumber.isNotBlank() && phoneNumber != profile?.phoneNumber && !phoneOtpPending) {
+                        OutlinedButton(enabled = !busy, onClick = {
+                            runTask {
+                                withContext(Dispatchers.IO) { client!!.sendPhoneChangeOtp(phoneNumber) }
+                                phoneOtpPending = true
+                                phoneOtpCode = ""
+                                phoneStatus = "Verification code requested. Check the SMS inbox."
+                            }
+                        }) { Text("Verify phone by SMS") }
+                    }
+                    if (phoneOtpPending) {
+                        OutlinedTextField(phoneOtpCode, { phoneOtpCode = it.filter(Char::isDigit).take(6) },
+                            label = { Text("SMS verification code") }, singleLine = true)
+                        Button(enabled = !busy && phoneOtpCode.length == 6, onClick = {
+                            runTask {
+                                val response = withContext(Dispatchers.IO) { client!!.verifyPhoneChangeOtp(phoneNumber, phoneOtpCode) }
+                                val access = response.optString("access_token")
+                                if (access.isNotBlank()) {
+                                    val nextRefresh = response.optString("refresh_token").ifBlank { refreshToken }
+                                    val expires = response.optLong("expires_in", 3600L)
+                                    SupabaseChatClient.saveSession(context, access, userId, username, nextRefresh, expires)
+                                    token = access
+                                    refreshToken = nextRefresh
+                                }
+                                profile = withContext(Dispatchers.IO) { client!!.loadMyProfile() }
+                                phoneNumber = profile?.phoneNumber.orEmpty()
+                                phoneOtpPending = false
+                                phoneOtpCode = ""
+                                phoneStatus = if (phoneNumber.isNotBlank()) "Phone number verified." else "Verification was not confirmed by the server."
+                            }
+                        }) { Text("Confirm phone number") }
+                        TextButton(onClick = { phoneOtpPending = false; phoneOtpCode = "" }) { Text("Cancel verification") }
+                    }
+                    if (phoneStatus.isNotBlank()) Text(phoneStatus, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { avatarPicker.launch("image/*") }) { Icon(Icons.Default.Person, null); Text(" Photo") }
                         OutlinedButton(onClick = { coverPicker.launch("image/*") }) { Icon(Icons.Default.Photo, null); Text(" Cover") }
                     }
-                    Text("Images are stored in your private ORRA profile storage. Your phone number is shown to signed-in ORRA users so they can call you using their SIM.", style = MaterialTheme.typography.bodySmall)
+                    Text("Images are stored in private ORRA profile storage. Only verified phone numbers are shown in keypad lookup.", style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = {
                 TextButton(enabled = !busy, onClick = {
                     runTask {
                         withContext(Dispatchers.IO) {
-                            client!!.updateProfile(displayName, bio, phoneNumber, newAvatarPath, newCoverPath)
+                            client!!.updateProfile(displayName, bio, newAvatarPath, newCoverPath)
                         }
                         profile = withContext(Dispatchers.IO) { client!!.loadMyProfile() }
                         newAvatarPath = null; newCoverPath = null
