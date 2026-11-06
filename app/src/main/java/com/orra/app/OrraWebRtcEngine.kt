@@ -17,6 +17,7 @@ class OrraWebRtcEngine(
 ) {
     private val egl = EglBase.create()
     private var factory: PeerConnectionFactory? = null
+    private var audioModule: JavaAudioDeviceModule? = null
     private var peer: PeerConnection? = null
     private var audioSource: AudioSource? = null
     private var audioTrack: AudioTrack? = null
@@ -48,9 +49,10 @@ class OrraWebRtcEngine(
             PeerConnectionFactory.initialize(
                 PeerConnectionFactory.InitializationOptions.builder(context).createInitializationOptions()
             )
-            val audioModule = JavaAudioDeviceModule.builder(context).createAudioDeviceModule()
+            val module = JavaAudioDeviceModule.builder(context).createAudioDeviceModule()
+            audioModule = module
             factory = PeerConnectionFactory.builder()
-                .setAudioDeviceModule(audioModule)
+                .setAudioDeviceModule(module)
                 .setVideoEncoderFactory(DefaultVideoEncoderFactory(egl.eglBaseContext, true, true))
                 .setVideoDecoderFactory(DefaultVideoDecoderFactory(egl.eglBaseContext))
                 .createPeerConnectionFactory()
@@ -215,6 +217,7 @@ class OrraWebRtcEngine(
 
     fun release() {
         runCatching { capturer?.stopCapture() }
+        runCatching { capturer?.dispose() }
         runCatching { videoTrack?.let { track -> localRenderer?.let(track::removeSink) } }
         runCatching { videoTrack?.let { track -> remoteRenderer?.let(track::removeSink) } }
         runCatching { remoteRenderer?.release() }
@@ -227,6 +230,7 @@ class OrraWebRtcEngine(
         runCatching { audioSource?.dispose() }
         runCatching { textureHelper?.dispose() }
         runCatching { factory?.dispose() }
+        runCatching { audioModule?.release() }
         signalExecutor.shutdownNow()
         runCatching { egl.release() }
     }
