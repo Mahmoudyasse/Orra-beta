@@ -1,6 +1,9 @@
 package com.orra.app
 
 import android.Manifest
+import android.content.ContentProviderOperation
+import android.content.pm.PackageManager
+import android.provider.ContactsContract
 import android.content.Context
 import android.media.MediaPlayer
 import android.net.Uri
@@ -67,12 +70,31 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+
+private fun saveOrraContact(context: Context, name: String, number: String) {
+    val ops = arrayListOf(
+        ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
+            .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, null)
+            .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, null).build(),
+        ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+            .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+            .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
+            .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name).build(),
+        ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+            .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+            .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
+            .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, number)
+            .withValue(ContactsContract.CommonDataKinds.Phone.TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE).build()
+    )
+    context.contentResolver.applyBatch(ContactsContract.AUTHORITY, ops)
+}
 
 private fun copyUriToCache(context: Context, uri: Uri): File {
     val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
@@ -126,6 +148,7 @@ fun ChatScreen() {
     var selectedMessage by remember { mutableStateOf<OrraChatMessage?>(null) }
     var editText by remember { mutableStateOf("") }
     var messageHistory by remember { mutableStateOf<List<String>>(emptyList()) }
+    var pendingSaveContact by remember { mutableStateOf<Pair<String, String>?>(null) }
     var chatTheme by remember(selected?.id) {
         mutableStateOf(prefs.getString("chat_theme_${selected?.id}", "liquid") ?: "liquid")
     }
@@ -199,6 +222,15 @@ fun ChatScreen() {
             file.delete()
             messages = withContext(Dispatchers.IO) { client.loadMessages(active.id) }
         }
+    }
+    val contactsWritePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val pending = pendingSaveContact
+        if (granted && pending != null) runCatching {
+            saveOrraContact(context, pending.first, pending.second)
+            error = "Contact saved to your phone."
+        }.onFailure { error = "Could not save contact. Check Contacts permission." }
+        else if (!granted) error = "Contacts permission was denied."
+        pendingSaveContact = null
     }
     val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -608,6 +640,18 @@ fun ChatScreen() {
                             prefs.edit().putBoolean("chat_muted_${selected!!.id}", next).apply()
                         }
                     }) { Text(if (muted) "Unmute notifications" else "Mute notifications") }
+                    if (!selected!!.isGroup && !selected!!.peerPhone.isNullOrBlank()) {
+                        TextButton(onClick = {
+                            val contact = selected!!.username to selected!!.peerPhone!!
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+                                runCatching { saveOrraContact(context, contact.first, contact.second); error = "Contact saved to your phone." }
+                                    .onFailure { error = "Could not save contact." }
+                            } else {
+                                pendingSaveContact = contact
+                                contactsWritePermission.launch(Manifest.permission.WRITE_CONTACTS)
+                            }
+                        }) { Text("Save contact to phone") }
+                    }
                     if (selected!!.isGroup) {
                         TextButton(onClick = {
                             runTask {
