@@ -18,7 +18,7 @@ Independent Android beta project derived from the original ORRA app.
 - Chat profile: display name, bio, optional phone number, avatar and cover image.
 - Chat media: private image/file uploads and processed voice-note recording/upload.
 - Message actions: edit, delete for me, delete for everyone and server-side edit/delete event history.
-- Chat actions: block/unblock storage foundation, leave group, delete chat for me, mute preference and per-chat color themes.
+- Chat actions: server-enforced direct-chat blocking, leave group, delete chat for me, mute preference and per-chat color themes.
 - Global appearance: System, Dark and Light modes with liquid accent palettes.
 - In-app ORRA Dynamic Island styling.
 
