@@ -6,11 +6,9 @@ import android.content.pm.PackageManager
 import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -44,7 +43,11 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private data class PhoneContact(val name: String, val number: String)
+private data class PhoneContact(
+    val contactId: Long,
+    val name: String,
+    val number: String
+)
 
 @Composable
 fun ContactsScreen() {
@@ -69,6 +72,7 @@ fun ContactsScreen() {
             contacts = withContext(Dispatchers.IO) {
                 val result = mutableListOf<PhoneContact>()
                 val projection = arrayOf(
+                    ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
                     ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
                     ContactsContract.CommonDataKinds.Phone.NUMBER
                 )
@@ -79,12 +83,16 @@ fun ContactsScreen() {
                     null,
                     ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
                 )?.use { cursor ->
+                    val idIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
                     val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
                     val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
                     while (cursor.moveToNext()) {
+                        val id = if (idIndex >= 0) cursor.getLong(idIndex) else -1L
                         val name = if (nameIndex >= 0) cursor.getString(nameIndex).orEmpty() else ""
                         val number = if (numberIndex >= 0) cursor.getString(numberIndex).orEmpty() else ""
-                        if (name.isNotBlank() && number.isNotBlank()) result.add(PhoneContact(name, number))
+                        if (id >= 0 && name.isNotBlank() && number.isNotBlank()) {
+                            result.add(PhoneContact(id, name, number))
+                        }
                     }
                 }
                 result.distinctBy { it.number }
@@ -161,6 +169,17 @@ fun ContactsScreen() {
                             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                                 Text(contact.name, fontWeight = FontWeight.Medium)
                                 Text(contact.number, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+                            }
+                            IconButton(onClick = {
+                                val contactUri = ContactsContract.Contacts.getLookupUri(
+                                    context.contentResolver,
+                                    contact.contactId
+                                )
+                                if (contactUri != null) {
+                                    context.startActivity(Intent(Intent.ACTION_EDIT, contactUri))
+                                }
+                            }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit ${contact.name}")
                             }
                             IconButton(onClick = {
                                 context.startActivity(Intent(Intent.ACTION_DIAL).apply {
