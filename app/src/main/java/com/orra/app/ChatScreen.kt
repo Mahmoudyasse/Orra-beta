@@ -116,6 +116,7 @@ fun ChatScreen() {
     var profile by remember { mutableStateOf<OrraChatProfile?>(null) }
     var displayName by remember { mutableStateOf("") }
     var bio by remember { mutableStateOf("") }
+    var phoneNumber by remember { mutableStateOf("") }
     var newAvatarPath by remember { mutableStateOf<String?>(null) }
     var newCoverPath by remember { mutableStateOf<String?>(null) }
     var avatarPreview by remember { mutableStateOf<String?>(null) }
@@ -132,6 +133,7 @@ fun ChatScreen() {
     var voiceStatus by remember { mutableStateOf("") }
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     val recorder = remember { OrraVoiceRecorder(context.cacheDir) }
+    val startCellularCall = rememberOrraCallAction()
     val configured = projectUrl.startsWith("https://") && publishableKey.isNotBlank()
     val signedIn = token.isNotBlank() && userId.isNotBlank()
     val client = remember(projectUrl, publishableKey, token, userId) {
@@ -242,6 +244,7 @@ fun ChatScreen() {
                 profile = loaded
                 displayName = loaded.displayName
                 bio = loaded.bio
+                phoneNumber = loaded.phoneNumber
                 avatarPreview = loaded.avatarUrl
                 coverPreview = loaded.coverUrl
             }.onFailure { error = it.message ?: "Profile could not be loaded." }
@@ -390,7 +393,11 @@ fun ChatScreen() {
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (!selected!!.isGroup) {
-                    IconButton(onClick = { error = "Internet voice calls need the ORRA calling service to be configured. No fake call will be started." }) {
+                    IconButton(onClick = {
+                        val number = selected!!.peerPhone
+                        if (number.isNullOrBlank()) error = "This user has not added a phone number to their ORRA profile."
+                        else startCellularCall(selected!!.username, number)
+                    }) {
                         Icon(Icons.Default.Call, contentDescription = "Voice call")
                     }
                     IconButton(onClick = { error = "Video calling needs WebRTC signaling and TURN server credentials. Camera preview is not a video call." }) {
@@ -493,18 +500,19 @@ fun ChatScreen() {
                         Modifier.size(72.dp).clip(CircleShape))
                     OutlinedTextField(displayName, { displayName = it }, label = { Text("Display name") }, singleLine = true)
                     OutlinedTextField(bio, { bio = it }, label = { Text("About") }, maxLines = 3)
+                    OutlinedTextField(phoneNumber, { phoneNumber = it }, label = { Text("Phone number for SIM calls") }, singleLine = true)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { avatarPicker.launch("image/*") }) { Icon(Icons.Default.Person, null); Text(" Photo") }
                         OutlinedButton(onClick = { coverPicker.launch("image/*") }) { Icon(Icons.Default.Photo, null); Text(" Cover") }
                     }
-                    Text("Images are stored in your private ORRA profile storage.", style = MaterialTheme.typography.bodySmall)
+                    Text("Images are stored in your private ORRA profile storage. Your phone number is shown to signed-in ORRA users so they can call you using their SIM.", style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = {
                 TextButton(enabled = !busy, onClick = {
                     runTask {
                         withContext(Dispatchers.IO) {
-                            client!!.updateProfile(displayName, bio, newAvatarPath, newCoverPath)
+                            client!!.updateProfile(displayName, bio, phoneNumber, newAvatarPath, newCoverPath)
                         }
                         profile = withContext(Dispatchers.IO) { client!!.loadMyProfile() }
                         newAvatarPath = null; newCoverPath = null
