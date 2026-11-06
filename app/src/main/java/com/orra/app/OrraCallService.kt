@@ -1,6 +1,7 @@
 package com.orra.app
 
 import android.content.Intent
+import android.os.Build
 import android.telecom.Call
 import android.telecom.CallAudioState
 import android.telecom.InCallService
@@ -37,6 +38,11 @@ class OrraInCallService : InCallService() {
     override fun onCallAdded(call: Call) {
         super.onCallAdded(call)
         OrraCallState.activeCall = call
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            call.details.callDirection == Call.Details.DIRECTION_INCOMING) {
+            val number = call.details.handle?.schemeSpecificPart.orEmpty()
+            if (number.isNotBlank()) recordOrraCall(this, number, number, "Incoming")
+        }
         OrraCallState.muted = false
         OrraCallState.speaker = false
         updateStatus(call.state)
