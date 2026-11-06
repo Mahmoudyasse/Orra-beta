@@ -73,6 +73,9 @@ class MainActivity : ComponentActivity() {
     private fun consumeAuthCallback(intent: Intent?) {
         val uri = intent?.data ?: return
         if (uri.scheme != "com.orra.beta" || uri.host != "auth-callback") return
+        // Clear the callback URI before recreating the activity so it cannot be consumed repeatedly.
+        intent.data = null
+        setIntent(intent)
         val values = uri.fragment.orEmpty().split("&").mapNotNull { part ->
             val split = part.indexOf("=")
             if (split <= 0) null else Uri.decode(part.substring(0, split)) to Uri.decode(part.substring(split + 1))
