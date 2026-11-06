@@ -252,13 +252,23 @@ class SupabaseChatClient(
     }
 
     fun editMessage(messageId: String, newBody: String) {
-        request("/rest/v1/messages?id=eq." + encode(messageId), "PATCH",
-            JSONObject().put("body", newBody.trim()).put("edited_at", java.time.Instant.now().toString()))
+        request("/rest/v1/rpc/orra_edit_message", "POST",
+            JSONObject().put("target_message", messageId).put("new_body", newBody.trim()))
     }
 
     fun deleteMessageForEveryone(messageId: String) {
-        request("/rest/v1/messages?id=eq." + encode(messageId), "PATCH",
-            JSONObject().put("body", "This message was deleted").put("deleted_for_everyone", true))
+        request("/rest/v1/rpc/orra_delete_message_for_everyone", "POST",
+            JSONObject().put("target_message", messageId))
+    }
+
+    fun loadMessageHistory(messageId: String): List<String> {
+        val rows = JSONArray(request("/rest/v1/message_events?select=event_type,created_at&message_id=eq." +
+            encode(messageId) + "&order=created_at.desc"))
+        return (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val label = if (row.optString("event_type") == "edited") "Message edited" else "Deleted for everyone"
+            label + " • " + row.optString("created_at").take(16).replace("T", " ")
+        }
     }
 
     fun deleteMessageForMe(messageId: String) {
