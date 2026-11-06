@@ -117,8 +117,11 @@ class SupabaseChatClient(
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             if (code !in 200..299) {
-                val detail = runCatching { JSONObject(response).optString("message").ifBlank { response } }.getOrDefault(response)
-                val safeMessage = when (code) {
+                val detail = runCatching {
+                    val json = JSONObject(response)
+                    json.optString("message").ifBlank { json.optString("error").ifBlank { response } }
+                }.getOrDefault(response)
+                val safeMessage = if (path == "/functions/v1/orra-ai-chat" && detail.isNotBlank()) detail.take(220) else when (code) {
                     400 -> "Could not complete that request. Check the information and try again."
                     401, 403 -> "Your session or permissions need attention. Sign in again and retry."
                     404 -> "This feature is not available on the server yet."
