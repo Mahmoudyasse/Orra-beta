@@ -181,6 +181,7 @@ fun ChatScreen() {
     var authMethod by remember { mutableStateOf("email") }
     var phoneInput by remember { mutableStateOf("") }
     var phoneCountryCode by remember { mutableStateOf(prefs.getString("phone_country_code", "+20").orEmpty().ifBlank { "+20" }) }
+    var phoneCountryName by remember { mutableStateOf(prefs.getString("phone_country_name", "Egypt").orEmpty().ifBlank { "Egypt" }) }
     var countryMenuExpanded by remember { mutableStateOf(false) }
     val internationalPhone = remember(phoneInput, phoneCountryCode) {
         val raw = phoneInput.trim().replace(Regex("[^0-9+]"), "")
@@ -658,7 +659,7 @@ fun ChatScreen() {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Box {
                             OutlinedButton(onClick = { countryMenuExpanded = true }) {
-                                Text((orraPhoneCountries.firstOrNull { it.code == phoneCountryCode }?.name ?: "Country") + " " + phoneCountryCode)
+                                Text(phoneCountryName + " " + phoneCountryCode)
                             }
                             DropdownMenu(expanded = countryMenuExpanded, onDismissRequest = { countryMenuExpanded = false }) {
                                 orraPhoneCountries.forEach { country ->
@@ -666,7 +667,9 @@ fun ChatScreen() {
                                         text = { Text(country.name + " (" + country.code + ")") },
                                         onClick = {
                                             phoneCountryCode = country.code
-                                            prefs.edit().putString("phone_country_code", country.code).apply()
+                                            phoneCountryName = country.name
+                                            prefs.edit().putString("phone_country_code", country.code)
+                                                .putString("phone_country_name", country.name).apply()
                                             countryMenuExpanded = false
                                         }
                                     )
