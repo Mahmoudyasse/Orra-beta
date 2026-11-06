@@ -431,13 +431,44 @@ class SupabaseChatClient(
     }
 
     fun loadMessageHistory(messageId: String): List<String> {
-        val rows = JSONArray(request("/rest/v1/message_events?select=event_type,created_at&message_id=eq." +
+        val rows = JSONArray(request("/rest/v1/message_events?select=event_type,created_at,message_snapshot&message_id=eq." +
             encode(messageId) + "&order=created_at.desc"))
         return (0 until rows.length()).mapNotNull { index ->
             val row = rows.optJSONObject(index) ?: return@mapNotNull null
-            val label = if (row.optString("event_type") == "edited") "Message edited" else "Deleted for everyone"
+            val kind = row.optString("event_type")
+            val snapshot = row.optJSONObject("message_snapshot")
+            val content = snapshot?.optString("body").orEmpty().takeIf { it.isNotBlank() } ?: "Content unavailable"
+            val label = when (kind) {
+                "edited" -> "Edited — previous text: $content"
+                "deleted_for_me" -> "Deleted by you — $content"
+                "deleted_for_everyone" -> "Deleted for everyone — $content"
+                else -> "Message event — $content"
+            }
             label + " • " + row.optString("created_at").take(16).replace("T", " ")
         }
+    }
+
+    fun ensureDailyCloudBackup(): String? {
+        val uid = currentUserId ?: return null
+        val latest = JSONArray(request("/rest/v1/orra_chat_backups?select=id,created_at&owner_id=eq." +
+            encode(uid) + "&order=created_at.desc&limit=1"))
+        if (latest.length() > 0) {
+            val at = latest.optJSONObject(0)?.optString("created_at").orEmpty()
+            val recent = runCatching {
+                java.time.Instant.parse(at).isAfter(java.time.Instant.now().minusSeconds(86400))
+            }.getOrDefault(false)
+            if (recent) return latest.optJSONObject(0)?.optString("id")
+        }
+        val result = request("/rest/v1/rpc/orra_create_chat_backup", "POST", JSONObject())
+        return result.trim().trim('"').takeIf { it.isNotBlank() }
+    }
+
+    fun searchUsersByPhone(rawPhone: String): OrraChatUser? {
+        val phone = normalizePhone(rawPhone)
+        val rows = JSONArray(request("/rest/v1/profiles?select=id,username,phone_number&phone_number=eq." + encode(phone) + "&limit=2"))
+        val row = (0 until rows.length()).mapNotNull { rows.optJSONObject(it) }
+            .firstOrNull { it.optString("id") != currentUserId } ?: return null
+        return OrraChatUser(row.optString("id"), row.optString("username"))
     }
 
     fun deleteMessageForMe(messageId: String) {
@@ -446,7 +477,7 @@ class SupabaseChatClient(
     }
 
     fun uploadMedia(bucket: String, file: File, objectPath: String, mimeType: String): String {
-        val maxBytes = if (bucket == "orra-profiles") 5L * 1024L * 1024L else 20L * 1024L * 1024L
+        val maxBytes = if (bucket == "orra-profiles") 5L * 1024L * 1024L else 100L * 1024L * 1024L
         require(file.length() in 1..maxBytes) { "File must be between 1 byte and ${maxBytes / (1024L * 1024L)} MB." }
         val safePath = objectPath.split("/").joinToString("/") { encode(it) }
         val connection = openHttp(URL(projectUrl.trimEnd('/') + "/storage/v1/object/" + bucket + "/" + safePath))
@@ -487,6 +518,47 @@ class SupabaseChatClient(
         request("/rest/v1/messages", "POST", JSONObject().put("conversation_id", conversationId)
             .put("sender_id", uid).put("body", caption.ifBlank { type })
             .put("message_type", type).put("media_url", mediaPath))
+    }
+
+    fun loadMessageHistory(messageId: String): List<String> {
+        val rows = JSONArray(request("/rest/v1/message_events?select=event_type,created_at,message_snapshot&message_id=eq." +
+            encode(messageId) + "&order=created_at.desc"))
+        return (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val kind = row.optString("event_type")
+            val snapshot = row.optJSONObject("message_snapshot")
+            val content = snapshot?.optString("body").orEmpty().takeIf { it.isNotBlank() } ?: "Content unavailable"
+            val label = when (kind) {
+                "edited" -> "Edited — previous text: $content"
+                "deleted_for_me" -> "Deleted by you — $content"
+                "deleted_for_everyone" -> "Deleted for everyone — $content"
+                else -> "Message event — $content"
+            }
+            label + " • " + row.optString("created_at").take(16).replace("T", " ")
+        }
+    }
+
+    fun ensureDailyCloudBackup(): String? {
+        val uid = currentUserId ?: return null
+        val latest = JSONArray(request("/rest/v1/orra_chat_backups?select=id,created_at&owner_id=eq." +
+            encode(uid) + "&order=created_at.desc&limit=1"))
+        if (latest.length() > 0) {
+            val at = latest.optJSONObject(0)?.optString("created_at").orEmpty()
+            val recent = runCatching {
+                java.time.Instant.parse(at).isAfter(java.time.Instant.now().minusSeconds(86400))
+            }.getOrDefault(false)
+            if (recent) return latest.optJSONObject(0)?.optString("id")
+        }
+        val result = request("/rest/v1/rpc/orra_create_chat_backup", "POST", JSONObject())
+        return result.trim().trim('"').takeIf { it.isNotBlank() }
+    }
+
+    fun searchUsersByPhone(rawPhone: String): OrraChatUser? {
+        val phone = normalizePhone(rawPhone)
+        val rows = JSONArray(request("/rest/v1/profiles?select=id,username,phone_number&phone_number=eq." + encode(phone) + "&limit=2"))
+        val row = (0 until rows.length()).mapNotNull { rows.optJSONObject(it) }
+            .firstOrNull { it.optString("id") != currentUserId } ?: return null
+        return OrraChatUser(row.optString("id"), row.optString("username"))
     }
 
     fun sendLocationMessage(conversationId: String, latitude: String, longitude: String) {
