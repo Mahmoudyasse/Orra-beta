@@ -149,6 +149,17 @@ class SupabaseChatClient(
         return JSONObject(request("/auth/v1/verify", "POST", body, false))
     }
 
+    fun sendPhoneChangeOtp(phone: String): JSONObject {
+        val body = JSONObject().put("phone", normalizePhone(phone))
+        return JSONObject(request("/auth/v1/user", "PUT", body))
+    }
+
+    fun verifyPhoneChangeOtp(phone: String, code: String): JSONObject {
+        require(code.trim().matches(Regex("\\d{6}"))) { "Enter the 6-digit SMS code." }
+        val body = JSONObject().put("type", "phone_change").put("phone", normalizePhone(phone)).put("token", code.trim())
+        return JSONObject(request("/auth/v1/verify", "POST", body))
+    }
+
     private fun normalizePhone(raw: String): String {
         val value = raw.trim().replace(Regex("[^0-9+]"), "")
         require(value.isNotBlank()) { "Enter a phone number." }
@@ -323,10 +334,10 @@ class SupabaseChatClient(
             JSONObject().put("target_conversation", conversationId))
     }
 
-    fun updateProfile(displayName: String, bio: String, phoneNumber: String, avatarUrl: String?, coverUrl: String?) {
+    fun updateProfile(displayName: String, bio: String, avatarUrl: String?, coverUrl: String?) {
         val uid = currentUserId ?: throw IllegalStateException("Sign in again.")
         val body = JSONObject().put("display_name", displayName.trim())
-            .put("bio", bio.trim()).put("phone_number", phoneNumber.trim()).put("updated_at", java.time.Instant.now().toString())
+            .put("bio", bio.trim()).put("updated_at", java.time.Instant.now().toString())
         if (avatarUrl != null) body.put("avatar_url", avatarUrl)
         if (coverUrl != null) body.put("cover_url", coverUrl)
         request("/rest/v1/profiles?id=eq." + encode(uid), "PATCH", body)
