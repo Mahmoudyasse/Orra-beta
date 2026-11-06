@@ -115,7 +115,10 @@ fun OrraInternetCallScreen() {
             onError = { error = it; status = "Call problem" })
         engine = rtc
         rtc.attachRenderers(if (video) localRenderer else null, if (video) remoteRenderer else null)
-        rtc.start()
+        val iceServers = runCatching { withContext(Dispatchers.IO) { api.loadIceServers() } }
+            .onFailure { error = it.message ?: "TURN setup unavailable; trying STUN only." }
+            .getOrDefault(emptyList())
+        rtc.start(iceServers)
         var lastId = 0L
         try {
             while (isActive && OrraInternetCallState.callId == callId) {
