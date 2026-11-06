@@ -36,6 +36,8 @@ class SupabaseChatClient(
 ) {
     companion object {
         const val PREFS = "orra_chat_backend"
+        const val DEFAULT_PROJECT_URL = "https://bmehobgcdjtnbwsdgjxg.supabase.co"
+        const val DEFAULT_PUBLISHABLE_KEY = "sb_publishable_ngdm1off2Dj6j7iDHYboHw_gjAVL8UB"
         fun saveConfig(context: Context, url: String, key: String) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putString("url", url.trim().trimEnd('/'))
@@ -118,7 +120,7 @@ class SupabaseChatClient(
     fun signUp(email: String, password: String, username: String): JSONObject {
         val body = JSONObject().put("email", email.trim()).put("password", password)
             .put("data", JSONObject().put("username", username.trim().lowercase()))
-        return JSONObject(request("/auth/v1/signup", "POST", body, false))
+        return JSONObject(request("/auth/v1/signup?redirect_to=" + encode("com.orra.beta://auth-callback/"), "POST", body, false))
     }
 
     fun signIn(email: String, password: String): JSONObject {
