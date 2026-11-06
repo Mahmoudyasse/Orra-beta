@@ -409,7 +409,7 @@ class SupabaseChatClient(
 
     fun sendLocationMessage(conversationId: String, latitude: String, longitude: String) {
         val uid = currentUserId ?: throw IllegalStateException("Sign in again.")
-        val body = "Latitude: $latitude\nLongitude: $longitude"
+        val body = "Latitude: $latitude\nLongitude: $longitude\nhttps://maps.google.com/?q=$latitude,$longitude"
         request("/rest/v1/messages", "POST", JSONObject().put("conversation_id", conversationId)
             .put("sender_id", uid).put("body", body).put("message_type", "location"))
     }
