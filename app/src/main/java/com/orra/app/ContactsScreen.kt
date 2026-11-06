@@ -45,6 +45,7 @@ import kotlinx.coroutines.withContext
 
 private data class PhoneContact(
     val contactId: Long,
+    val lookupKey: String,
     val name: String,
     val number: String
 )
@@ -73,6 +74,7 @@ fun ContactsScreen() {
                 val result = mutableListOf<PhoneContact>()
                 val projection = arrayOf(
                     ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
+                    ContactsContract.Contacts.LOOKUP_KEY,
                     ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
                     ContactsContract.CommonDataKinds.Phone.NUMBER
                 )
@@ -84,14 +86,16 @@ fun ContactsScreen() {
                     ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
                 )?.use { cursor ->
                     val idIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
+                    val lookupIndex = cursor.getColumnIndex(ContactsContract.Contacts.LOOKUP_KEY)
                     val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
                     val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
                     while (cursor.moveToNext()) {
                         val id = if (idIndex >= 0) cursor.getLong(idIndex) else -1L
+                        val lookupKey = if (lookupIndex >= 0) cursor.getString(lookupIndex).orEmpty() else ""
                         val name = if (nameIndex >= 0) cursor.getString(nameIndex).orEmpty() else ""
                         val number = if (numberIndex >= 0) cursor.getString(numberIndex).orEmpty() else ""
-                        if (id >= 0 && name.isNotBlank() && number.isNotBlank()) {
-                            result.add(PhoneContact(id, name, number))
+                        if (id >= 0 && lookupKey.isNotBlank() && name.isNotBlank() && number.isNotBlank()) {
+                            result.add(PhoneContact(id, lookupKey, name, number))
                         }
                     }
                 }
@@ -172,8 +176,8 @@ fun ContactsScreen() {
                             }
                             IconButton(onClick = {
                                 val contactUri = ContactsContract.Contacts.getLookupUri(
-                                    context.contentResolver,
-                                    contact.contactId
+                                    contact.contactId,
+                                    contact.lookupKey
                                 )
                                 if (contactUri != null) {
                                     context.startActivity(Intent(Intent.ACTION_EDIT, contactUri))
