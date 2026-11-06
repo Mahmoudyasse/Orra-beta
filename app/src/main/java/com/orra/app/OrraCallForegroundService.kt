@@ -9,9 +9,11 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 
 class OrraCallForegroundService : Service() {
+    private var wakeLock: PowerManager.WakeLock? = null
     companion object {
         const val EXTRA_VIDEO = "video"
         private const val CHANNEL_ID = "orra_active_call"
@@ -20,6 +22,8 @@ class OrraCallForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        wakeLock = (getSystemService(POWER_SERVICE) as PowerManager)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ORRA:ActiveCall").apply { acquire() }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
@@ -59,6 +63,12 @@ class OrraCallForegroundService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
         return START_NOT_STICKY
+    }
+
+    override fun onDestroy() {
+        runCatching { wakeLock?.let { if (it.isHeld) it.release() } }
+        wakeLock = null
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
