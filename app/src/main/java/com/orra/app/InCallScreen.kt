@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,6 +48,8 @@ fun InCallScreen() {
     var showKeypad by remember { mutableStateOf(false) }
     var frontCamera by remember { mutableStateOf(true) }
     var videoMessage by remember { mutableStateOf("") }
+    var callClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val connectedAt = OrraCallState.connectedAtMillis
     val scope = rememberCoroutineScope()
     val videoCall = call?.videoCall
     val cameraManager = remember { context.getSystemService(CameraManager::class.java) }
@@ -66,6 +69,15 @@ fun InCallScreen() {
         if (videoActive) setCallCamera(frontCamera)
     }
 
+    LaunchedEffect(connectedAt) {
+        if (connectedAt > 0L) {
+            while (true) {
+                callClock = System.currentTimeMillis()
+                delay(1000)
+            }
+        }
+    }
+
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 34.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -77,6 +89,14 @@ fun InCallScreen() {
         Text(number.ifBlank { "Unknown number" }, fontSize = 26.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
         Text(OrraCallState.status, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+        if (connectedAt > 0L) {
+            val elapsed = ((callClock - connectedAt).coerceAtLeast(0L) / 1000L)
+            val hours = elapsed / 3600
+            val minutes = (elapsed % 3600) / 60
+            val seconds = elapsed % 60
+            Text(String.format("%02d:%02d:%02d", hours, minutes, seconds),
+                style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+        }
 
         if (videoActive && call != null && videoCall != null) {
             Spacer(Modifier.height(18.dp))
