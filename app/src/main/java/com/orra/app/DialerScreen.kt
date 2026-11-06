@@ -49,6 +49,7 @@ private val keys = listOf(
 
 private fun startCall(ctx: Context, number: String) {
     if (number.isBlank()) return
+    recordOrraCall(ctx, number, number)
     ctx.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(number))))
 }
 
