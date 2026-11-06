@@ -33,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +44,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -66,6 +70,19 @@ fun ContactsScreen() {
     var contacts by remember { mutableStateOf<List<PhoneContact>>(emptyList()) }
     var search by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    var refreshKey by remember { mutableStateOf(0) }
+    var permissionDenied by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+                refreshKey++
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     var showFavorites by remember { mutableStateOf(false) }
     var pendingCall by remember { mutableStateOf<Pair<String, String>?>(null) }
     val callPermissionLauncher = rememberLauncherForActivityResult(
@@ -84,9 +101,12 @@ fun ContactsScreen() {
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted -> hasPermission = granted }
+    ) { granted ->
+        hasPermission = granted
+        permissionDenied = !granted
+    }
 
-    LaunchedEffect(hasPermission) {
+    LaunchedEffect(hasPermission, refreshKey) {
         if (hasPermission) {
             loading = true
             contacts = withContext(Dispatchers.IO) {
@@ -166,6 +186,9 @@ fun ContactsScreen() {
                     )
                     Button(onClick = { permissionLauncher.launch(Manifest.permission.READ_CONTACTS) }) {
                         Text("Allow access")
+                    }
+                    if (permissionDenied) {
+                        Text("If Android no longer shows the permission prompt, enable Contacts from App permissions in Settings.")
                     }
                 }
             }
