@@ -49,14 +49,7 @@ private val keys = listOf(
 fun DialerScreen() {
     val ctx = LocalContext.current
     var number by remember { mutableStateOf("") }
-    var pendingCall by remember { mutableStateOf("") }
-    val callPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        val pending = pendingCall
-        pendingCall = ""
-        if (granted && pending.isNotBlank()) placeOrraCall(ctx, pending, pending)
-    }
+    val startCall = rememberOrraCallAction()
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = 24.dp),
@@ -86,12 +79,7 @@ fun DialerScreen() {
                     Modifier.size(78.dp)
                         .neonPress(CallGreen, 39.dp, 0.6f) {
                             if (number.isNotBlank()) {
-                                if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
-                                    placeOrraCall(ctx, number, number)
-                                } else {
-                                    pendingCall = number
-                                    callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
-                                }
+                                startCall(number, number)
                             }
                         }
                         .clip(CircleShape).background(CallGreen),
