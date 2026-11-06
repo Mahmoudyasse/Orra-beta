@@ -448,6 +448,20 @@ class SupabaseChatClient(
         }
     }
 
+    fun loadDeletedHistoryForConversation(conversationId: String): List<String> {
+        val path = "/rest/v1/message_events?select=event_type,created_at,message_snapshot,actor_id,messages!inner(conversation_id)" +
+            "&messages.conversation_id=eq." + encode(conversationId) +
+            "&event_type=in.(deleted_for_everyone,deleted_for_me)&order=created_at.desc&limit=200"
+        val rows = JSONArray(request(path))
+        return (0 until rows.length()).mapNotNull { i ->
+            val row = rows.optJSONObject(i) ?: return@mapNotNull null
+            val snapshot = row.optJSONObject("message_snapshot")
+            val body = snapshot?.optString("body").orEmpty().ifBlank { "Attachment or empty message" }
+            val kind = if (row.optString("event_type") == "deleted_for_me") "Deleted by you" else "Deleted for everyone"
+            "$kind: $body • " + row.optString("created_at").take(16).replace("T", " ")
+        }
+    }
+
     fun ensureDailyCloudBackup(): String? {
         val uid = currentUserId ?: return null
         val latest = JSONArray(request("/rest/v1/orra_chat_backups?select=id,created_at&owner_id=eq." +
