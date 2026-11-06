@@ -32,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,12 +45,15 @@ import androidx.compose.material3.Button
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Date
 
 @Composable
 fun CallsScreen() {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var callActionError by remember { mutableStateOf("") }
     var entries by remember { mutableStateOf(readOrraCallHistory(context)) }
     val prefs = remember { context.getSharedPreferences(SupabaseChatClient.PREFS, android.content.Context.MODE_PRIVATE) }
     val userId = prefs.getString("user_id", "").orEmpty()
@@ -99,6 +103,8 @@ fun CallsScreen() {
             }
         }
 
+        if (callActionError.isNotBlank()) Text(callActionError, color = MaterialTheme.colorScheme.error)
+
         if (incomingCalls.isNotEmpty()) {
             Text("Incoming ORRA internet calls", style = MaterialTheme.typography.titleMedium)
             incomingCalls.forEach { call ->
@@ -108,15 +114,31 @@ fun CallsScreen() {
                         Text("ORRA user", style = MaterialTheme.typography.bodySmall)
                     }
                     Button(onClick = {
-                        runCatching {
-                            OrraCallSignaling(context, userId, accessToken).updateStatus(call.id, "accepted")
-                            OrraInternetCallState.begin(call, "ORRA contact", false, userId, accessToken)
-                            incomingCalls = incomingCalls.filterNot { it.id == call.id }
+                        scope.launch {
+                            val result = runCatching {
+                                withContext(Dispatchers.IO) {
+                                    OrraCallSignaling(context, userId, accessToken).updateStatus(call.id, "accepted")
+                                }
+                            }
+                            result.onSuccess {
+                                OrraInternetCallState.begin(call, "ORRA contact", false, userId, accessToken)
+                                incomingCalls = incomingCalls.filterNot { it.id == call.id }
+                                callActionError = ""
+                            }.onFailure { callActionError = it.message ?: "Could not answer call." }
                         }
                     }) { Text("Answer") }
                     OutlinedButton(onClick = {
-                        runCatching { OrraCallSignaling(context, userId, accessToken).updateStatus(call.id, "rejected") }
-                        incomingCalls = incomingCalls.filterNot { it.id == call.id }
+                        scope.launch {
+                            val result = runCatching {
+                                withContext(Dispatchers.IO) {
+                                    OrraCallSignaling(context, userId, accessToken).updateStatus(call.id, "rejected")
+                                }
+                            }
+                            result.onSuccess {
+                                incomingCalls = incomingCalls.filterNot { it.id == call.id }
+                                callActionError = ""
+                            }.onFailure { callActionError = it.message ?: "Could not decline call." }
+                        }
                     }) { Text("Decline") }
                 }
             }
