@@ -204,7 +204,7 @@ as $$
 begin
   if new.phone is not null then
     update public.profiles
-      set phone_number=new.phone,
+      set phone_number=case when new.phone_confirmed_at is not null then new.phone else null end,
           phone_verified=(new.phone_confirmed_at is not null),
           updated_at=now()
     where id=new.id;
