@@ -234,3 +234,44 @@ end;
 $$;
 
 grant execute on function public.orra_delete_conversation_for_me(uuid) to authenticated;
+
+create or replace function public.orra_users_blocked(first_user uuid, second_user uuid)
+returns boolean
+language sql stable security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.blocked_users
+    where (blocker_id = first_user and blocked_id = second_user)
+       or (blocker_id = second_user and blocked_id = first_user)
+  );
+$$;
+
+drop policy if exists "Members read messages" on public.messages;
+create policy "Members read messages" on public.messages
+for select to authenticated
+using (
+  public.is_orra_conversation_member(conversation_id)
+  and not exists (
+    select 1 from public.conversation_members cm
+    where cm.conversation_id = messages.conversation_id
+      and cm.user_id <> auth.uid()
+      and public.orra_users_blocked(auth.uid(), cm.user_id)
+  )
+);
+
+drop policy if exists "Members send messages as themselves" on public.messages;
+create policy "Members send messages as themselves" on public.messages
+for insert to authenticated
+with check (
+  sender_id = auth.uid()
+  and public.is_orra_conversation_member(conversation_id)
+  and not exists (
+    select 1 from public.conversation_members cm
+    where cm.conversation_id = messages.conversation_id
+      and cm.user_id <> auth.uid()
+      and public.orra_users_blocked(auth.uid(), cm.user_id)
+  )
+);
+
+grant execute on function public.orra_users_blocked(uuid, uuid) to authenticated;
