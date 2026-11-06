@@ -15,6 +15,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.background
@@ -104,7 +105,7 @@ fun rememberOrraCallAction(): (String, String) -> Unit {
         } else if (request != null) {
             pending = null
             if (phoneGranted) loadAccounts(request)
-            else placeOrraCallOnAccount(context, request.first, request.second, null)
+            else Toast.makeText(context, "Phone state permission is required to choose the SIM safely. Enable it and try again.", Toast.LENGTH_LONG).show()
         }
     }
 
