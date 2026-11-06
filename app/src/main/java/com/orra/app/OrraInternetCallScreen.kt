@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -75,6 +77,16 @@ object OrraInternetCallState {
         userId = ""
         accessToken = ""
     }
+}
+
+private const val ORRA_NO_INTERNET_CALL_MESSAGE = "No internet connection. ORRA internet calls need an active internet connection."
+
+private fun hasValidatedInternet(context: Context): Boolean {
+    val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+    val network = manager.activeNetwork ?: return false
+    val capabilities = manager.getNetworkCapabilities(network) ?: return false
+    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 }
 
 @Composable
@@ -149,15 +161,15 @@ fun OrraInternetCallScreen() {
             val serviceIntent = Intent(context, OrraCallForegroundService::class.java)
                 .putExtra(OrraCallForegroundService.EXTRA_VIDEO, video)
             ContextCompat.startForegroundService(context, serviceIntent)
-        }.onFailure { error = it.message ?: "Could not keep the call active in the background." }
+        }.onFailure { android.util.Log.w("ORRA", "Call foreground service start failed", it); if (!hasValidatedInternet(context)) error = ORRA_NO_INTERNET_CALL_MESSAGE }
         val api = OrraCallSignaling(context, userId, token)
         val rtc = OrraWebRtcEngine(context, api, callId, caller, video,
             onStatus = { status = it },
-            onError = { error = it; status = "Call problem" })
+            onError = { detail -> android.util.Log.w("ORRA", "WebRTC call error: ${detail.take(240)}"); if (!hasValidatedInternet(context)) { error = ORRA_NO_INTERNET_CALL_MESSAGE; status = "No internet connection" } else { error = ""; status = "Call problem" } })
         engine = rtc
         rtc.attachRenderers(if (video) localRenderer else null, if (video) remoteRenderer else null)
         val iceServers = runCatching { withContext(Dispatchers.IO) { api.loadIceServers() } }
-            .onFailure { error = it.message ?: "TURN setup unavailable; trying STUN only." }
+            .onFailure { android.util.Log.w("ORRA", "TURN credentials unavailable", it); if (!hasValidatedInternet(context)) error = ORRA_NO_INTERNET_CALL_MESSAGE }
             .getOrDefault(emptyList())
         rtc.start(iceServers)
         var lastId = 0L
@@ -193,7 +205,13 @@ fun OrraInternetCallScreen() {
                 delay(900)
             }
         } catch (e: Exception) {
-            error = e.message ?: "Call signaling stopped."
+            android.util.Log.w("ORRA", "Internet call signaling stopped", e)
+            if (!hasValidatedInternet(context)) {
+                error = ORRA_NO_INTERNET_CALL_MESSAGE
+                status = "No internet connection"
+            } else {
+                error = ""
+            }
         }
     }
 
