@@ -217,3 +217,6 @@ create trigger orra_sync_verified_phone_after_auth_update
 after update of phone,phone_confirmed_at on auth.users
 for each row execute function public.orra_sync_verified_phone();
 revoke all on function public.orra_sync_verified_phone() from public,anon,authenticated;
+-- Phone numbers are written only by the trusted Auth verification trigger.
+update public.profiles set phone_number=null where not phone_verified;
+revoke update(phone_number,phone_verified) on public.profiles from authenticated;
