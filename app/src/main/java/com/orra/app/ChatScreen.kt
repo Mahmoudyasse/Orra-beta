@@ -566,13 +566,20 @@ fun ChatScreen() {
                         Icon(Icons.Default.Add, contentDescription = "Add members")
                     }
                 }
+                IconButton(onClick = { chatSearchVisible = !chatSearchVisible; chatSearch = "" }) {
+                    Icon(Icons.Default.Search, contentDescription = "Search in chat")
+                }
                 IconButton(onClick = { showChatOptions = true }) { Icon(Icons.Default.Settings, contentDescription = "Chat options") }
+            }
+            if (chatSearchVisible) {
+                OutlinedTextField(chatSearch, { chatSearch = it }, Modifier.fillMaxWidth(),
+                    singleLine = true, label = { Text("Search messages in this chat") })
             }
             LazyColumn(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(messages, key = { it.id }) { message ->
+                items(messages.filter { chatSearch.isBlank() || it.body.contains(chatSearch, ignoreCase = true) }, key = { it.id }) { message ->
                     val mine = message.senderId == userId
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
                         Surface(
@@ -607,7 +614,17 @@ fun ChatScreen() {
                                         }) { Icon(Icons.Default.Mic, contentDescription = "Play voice message") }
                                         Text("Voice message")
                                     }
-                                    "file" -> Text("Attachment: ${message.body}")
+                                    "file", "video" -> Text(if (message.type == "video") "Video attachment: ${message.body}" else "File: ${message.body}")
+                                    "location" -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("Current location", fontWeight = FontWeight.SemiBold)
+                                        Text(message.body, style = MaterialTheme.typography.bodySmall)
+                                        TextButton(onClick = { clipboard.setText(AnnotatedString(message.body)) }) { Text("Copy location details") }
+                                    }
+                                    "contact" -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("Shared contact", fontWeight = FontWeight.SemiBold)
+                                        Text(message.body)
+                                        TextButton(onClick = { clipboard.setText(AnnotatedString(message.body)) }) { Text("Copy contact") }
+                                    }
                                     else -> Text(message.body)
                                 }
                                 if (message.editedAt != null) Text("Edited", style = MaterialTheme.typography.labelSmall,
@@ -622,8 +639,8 @@ fun ChatScreen() {
             if (voiceStatus.isNotBlank()) Text(voiceStatus, style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                IconButton(onClick = { attachmentPicker.launch("*/*") }, enabled = !busy) {
-                    Icon(Icons.Default.AttachFile, contentDescription = "Attach file")
+                IconButton(onClick = { showAttachmentMenu = true }, enabled = !busy) {
+                    Icon(Icons.Default.AttachFile, contentDescription = "Attach media, document, location or contact")
                 }
                 IconButton(onClick = {
                     if (recording) {
@@ -648,6 +665,53 @@ fun ChatScreen() {
         }
         if (busy) Text("Syncing…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
         if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+    }
+
+    if (showAttachmentMenu) {
+        AlertDialog(
+            onDismissRequest = { showAttachmentMenu = false },
+            title = { Text("Share with this chat") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = { showAttachmentMenu = false; attachmentPicker.launch("image/*") }) { Text("Photo from gallery") }
+                    TextButton(onClick = { showAttachmentMenu = false; documentPicker.launch(arrayOf("*/*")) }) { Text("Document, audio or video file") }
+                    TextButton(onClick = {
+                        showAttachmentMenu = false
+                        locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                    }) { Text("Share current location") }
+                    TextButton(onClick = { showAttachmentMenu = false; showContactShare = true }) { Text("Share a contact") }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showAttachmentMenu = false }) { Text("Close") } }
+        )
+    }
+
+    if (showContactShare) {
+        AlertDialog(
+            onDismissRequest = { showContactShare = false },
+            title = { Text("Share contact") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(contactShareName, { contactShareName = it }, label = { Text("Contact name") }, singleLine = true)
+                    OutlinedTextField(contactShareNumber, { contactShareNumber = it }, label = { Text("Phone number") }, singleLine = true)
+                    Text("This sends a contact card in ORRA. It does not add the contact to the recipient's phone automatically.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = contactShareName.isNotBlank() && contactShareNumber.isNotBlank() && !busy, onClick = {
+                    val active = selected
+                    val api = client
+                    if (active != null && api != null) runTask {
+                        withContext(Dispatchers.IO) { api.sendContactCard(active.id, contactShareName.trim(), contactShareNumber.trim()) }
+                        messages = withContext(Dispatchers.IO) { api.loadMessages(active.id) }
+                        showContactShare = false
+                        contactShareName = ""; contactShareNumber = ""
+                    }
+                }) { Text("Send contact") }
+            },
+            dismissButton = { TextButton(onClick = { showContactShare = false }) { Text("Cancel") } }
+        )
     }
 
     if (showProfile) {
