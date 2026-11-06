@@ -131,6 +131,11 @@ class SupabaseChatClient(
         return JSONObject(request("/auth/v1/signup?redirect_to=" + encode("com.orra.beta://auth-callback/"), "POST", body, false))
     }
 
+    fun signOut() {
+        request("/auth/v1/logout", "POST", JSONObject())
+        clearSession(context)
+    }
+
     fun signIn(email: String, password: String): JSONObject {
         val body = JSONObject().put("email", email.trim()).put("password", password)
         return JSONObject(request("/auth/v1/token?grant_type=password", "POST", body, false))
