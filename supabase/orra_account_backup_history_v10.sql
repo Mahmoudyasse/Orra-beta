@@ -241,8 +241,8 @@ begin
 end $$;
 
 -- Remove inherited broad grants and permit only the fields the app may edit.
-revoke all on table public.orra_chat_backups from anon,public;
+revoke all on table public.orra_chat_backups from anon,public,authenticated;
 grant select,insert,delete on table public.orra_chat_backups to authenticated;
-revoke all on table public.profiles from anon,public;
-revoke update on table public.profiles from authenticated;
+revoke all on table public.profiles from anon,public,authenticated;
+grant select on table public.profiles to authenticated;
 grant update(display_name,bio,avatar_url,cover_url,updated_at) on table public.profiles to authenticated;
