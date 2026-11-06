@@ -15,6 +15,8 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +49,7 @@ fun CallsScreen() {
     var query by remember { mutableStateOf("") }
     var directionFilter by remember { mutableStateOf("All") }
     var showClearDialog by remember { mutableStateOf(false) }
+    var showVoiceStudio by remember { mutableStateOf(false) }
     val startCall = rememberOrraCallAction()
     val filteredEntries = remember(entries, query) {
         entries.filter { entry ->
@@ -149,6 +152,18 @@ fun CallsScreen() {
         }
     }
 
+    if (showVoiceStudio) {
+        Dialog(onDismissRequest = { showVoiceStudio = false }) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().height(680.dp),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = MaterialTheme.colorScheme.background
+            ) {
+                VoiceIsolationScreen()
+            }
+        }
+    }
+
     if (showClearDialog) {
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
@@ -167,3 +182,5 @@ fun CallsScreen() {
         )
     }
 }
+        OutlinedButton(onClick = { showVoiceStudio = true }) { Text("Voice Studio / REC") }
+
