@@ -23,7 +23,7 @@ class OrraCallForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         wakeLock = (getSystemService(POWER_SERVICE) as PowerManager)
-            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ORRA:ActiveCall").apply { acquire() }
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ORRA:ActiveCall").apply { acquire(2 * 60 * 60 * 1000L) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
