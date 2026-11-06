@@ -2,7 +2,9 @@ package com.orra.app
 
 import android.Manifest
 import android.content.ContentValues
+import android.content.Context
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -14,6 +16,13 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.camera.video.MediaStoreOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.Recording
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -61,9 +70,24 @@ fun CameraScreen() {
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var camera by remember { mutableStateOf<Camera?>(null) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
+    var videoRecording by remember { mutableStateOf<Recording?>(null) }
+    var isRecordingVideo by remember { mutableStateOf(false) }
     var zoom by remember { mutableStateOf(1f) }
     var maxZoom by remember { mutableStateOf(1f) }
 
+    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            beginOrraVideoRecording(context, videoCapture, { active ->
+                videoRecording = active
+                isRecordingVideo = true
+            }, { message ->
+                videoRecording = null
+                isRecordingVideo = false
+                status = message
+            })
+        } else cameraError = "Microphone permission is needed to record video with sound."
+    }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         hasPermission = granted
         cameraError = if (granted) "" else "Camera access was not granted. Enable Camera in Android app permissions."
@@ -74,9 +98,8 @@ fun CameraScreen() {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("ORRA Camera", style = MaterialTheme.typography.headlineMedium)
-        Text("Camera tools run locally on your device.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+        Text("Photos and videos are captured on this device.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
             style = MaterialTheme.typography.bodySmall)
-
         Surface(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
@@ -108,7 +131,7 @@ fun CameraScreen() {
         else Text(status, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(modifier = Modifier.weight(1f), enabled = hasPermission,
+            OutlinedButton(modifier = Modifier.weight(1f), enabled = hasPermission && !isRecordingVideo,
                 onClick = { frontCamera = !frontCamera; flashEnabled = false; zoom = 1f }) {
                 Icon(Icons.Default.SwitchCamera, contentDescription = null)
                 Text(" Flip")
@@ -121,7 +144,7 @@ fun CameraScreen() {
                 Icon(if (flashEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff, contentDescription = null)
                 Text(if (flashEnabled) " Flash on" else " Flash")
             }
-            Button(modifier = Modifier.weight(1f), enabled = hasPermission && imageCapture != null,
+            Button(modifier = Modifier.weight(1f), enabled = hasPermission && imageCapture != null && !isRecordingVideo,
                 onClick = {
                     val capture = imageCapture ?: return@Button
                     val name = "ORRA_${System.currentTimeMillis()}.jpg"
@@ -155,6 +178,25 @@ fun CameraScreen() {
                 Text(" Snap")
             }
         }
+
+        Button(modifier = Modifier.fillMaxWidth(), enabled = hasPermission && videoCapture != null,
+            onClick = {
+                if (isRecordingVideo) {
+                    videoRecording?.stop()
+                    status = "Saving video…"
+                } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    beginOrraVideoRecording(context, videoCapture, { active ->
+                        videoRecording = active
+                        isRecordingVideo = true
+                        status = "Recording video…"
+                    }, { message ->
+                        videoRecording = null
+                        isRecordingVideo = false
+                        status = message
+                    })
+                } else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }) { Text(if (isRecordingVideo) "Stop video" else "Record video with sound") }
+
         if (maxZoom > 1f && hasPermission) {
             Text("Zoom  ${String.format("%.1f", zoom)}×", style = MaterialTheme.typography.labelMedium)
             Slider(value = zoom, onValueChange = {
@@ -162,7 +204,7 @@ fun CameraScreen() {
                 camera?.cameraControl?.setZoomRatio(it)
             }, valueRange = 1f..maxZoom)
         }
-        Text("Photos are saved in your phone gallery under Pictures/ORRA. ORRA does not upload them.",
+        Text("Photos: Pictures/ORRA. Videos: Movies/ORRA. Camera and microphone are used only after permission.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f))
     }
 
@@ -175,12 +217,16 @@ fun CameraScreen() {
                     val provider = future.get()
                     val selector = if (frontCamera) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
                     val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView!!.surfaceProvider) }
-                    val capture = ImageCapture.Builder()
-                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build()
+                    val capture = ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build()
+                    val recorder = Recorder.Builder()
+                        .setQualitySelector(QualitySelector.fromOrderedList(listOf(Quality.FHD, Quality.HD, Quality.SD)))
+                        .build()
+                    val video = VideoCapture.withOutput(recorder)
                     provider.unbindAll()
-                    val bound = provider.bindToLifecycle(lifecycleOwner, selector, preview, capture)
+                    val bound = provider.bindToLifecycle(lifecycleOwner, selector, preview, capture, video)
                     camera = bound
                     imageCapture = capture
+                    videoCapture = video
                     maxZoom = bound.cameraInfo.zoomState.value?.maxZoomRatio ?: 1f
                     zoom = 1f
                     bound.cameraControl.enableTorch(false)
@@ -191,10 +237,45 @@ fun CameraScreen() {
                 }
             }, executor)
             onDispose {
+                videoRecording?.stop()
                 runCatching { if (future.isDone) future.get().unbindAll() }
                 camera = null
                 imageCapture = null
+                videoCapture = null
             }
-        } else onDispose { camera = null; imageCapture = null }
+        } else onDispose { videoRecording?.stop(); camera = null; imageCapture = null; videoCapture = null }
     }
+}
+
+private fun beginOrraVideoRecording(
+    context: Context,
+    capture: VideoCapture<Recorder>?,
+    onStarted: (Recording) -> Unit,
+    onFinished: (String) -> Unit
+) {
+    val video = capture ?: run { onFinished("Video capture is not ready."); return }
+    val values = ContentValues().apply {
+        put(MediaStore.Video.Media.DISPLAY_NAME, "ORRA_${System.currentTimeMillis()}.mp4")
+        put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/ORRA")
+            put(MediaStore.Video.Media.IS_PENDING, 1)
+        }
+    }
+    val output = MediaStoreOutputOptions.Builder(context.contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+        .setContentValues(values).build()
+    runCatching {
+        video.output.prepareRecording(context, output).withAudioEnabled()
+            .start(ContextCompat.getMainExecutor(context)) { event ->
+                if (event is VideoRecordEvent.Finalize) {
+                    if (event.error == VideoRecordEvent.Finalize.ERROR_NONE) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && event.outputResults.outputUri != Uri.EMPTY) {
+                            val done = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
+                            context.contentResolver.update(event.outputResults.outputUri, done, null, null)
+                        }
+                        onFinished("Video saved to Movies/ORRA")
+                    } else onFinished("Video recording failed. Check camera and microphone access.")
+                }
+            }.also(onStarted)
+    }.onFailure { onFinished("Could not start video recording. Check microphone permission and device support.") }
 }
