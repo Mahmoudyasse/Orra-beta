@@ -1,6 +1,8 @@
 package com.orra.app
 
 import android.app.Activity
+import android.Manifest
+import android.content.pm.PackageManager
 import android.app.role.RoleManager
 import android.content.Intent
 import android.os.Build
@@ -8,6 +10,7 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -58,6 +61,8 @@ fun SettingsScreen() {
     }
     var backupStatus by remember { mutableStateOf("") }
     var backupBusy by remember { mutableStateOf(false) }
+    var notificationsAllowed by remember { mutableStateOf(Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notificationsAllowed = it }
     var showBlocked by remember { mutableStateOf(false) }
     var blockedUsers by remember { mutableStateOf<List<OrraBlockedUser>>(emptyList()) }
     var blockedStatus by remember { mutableStateOf("") }
@@ -146,6 +151,12 @@ fun SettingsScreen() {
                 }
                 Text("Contacts, camera and microphone permissions are requested only when their features are used. Cellular call controls inside ORRA require setting it as the default phone app.",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f))
+                Text(if (notificationsAllowed) "Notifications permission is enabled." else "Notifications permission is not enabled.",
+                    style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = {
+                    if (Build.VERSION.SDK_INT >= 33) notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    else context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+                }) { Text(if (notificationsAllowed) "Notification settings" else "Enable notifications") }
                 Text(if (isDefaultDialer) "ORRA is your default phone app." else "ORRA is not the default phone app yet.",
                     style = MaterialTheme.typography.bodySmall)
                 Button(onClick = {
