@@ -19,7 +19,7 @@ data class OrraChatMessage(
     val type: String = "text", val mediaUrl: String? = null, val editedAt: String? = null,
     val deletedForEveryone: Boolean = false, val senderUsername: String = ""
 )
-data class OrraUserPresence(val userId: String, val online: Boolean, val dnd: Boolean, val typing: Boolean, val lastSeen: String)
+data class OrraUserPresence(val userId: String, val online: Boolean, val dnd: Boolean, val typing: Boolean, val typingConversation: String?, val lastSeen: String)
 data class OrraChatProfile(
     val username: String, val displayName: String, val bio: String, val phoneNumber: String,
     val avatarUrl: String?, val coverUrl: String?
@@ -284,14 +284,14 @@ class SupabaseChatClient(
     fun loadPresence(userIds: List<String>): Map<String, OrraUserPresence> {
         val ids = userIds.filter { it.isNotBlank() }.distinct()
         if (ids.isEmpty()) return emptyMap()
-        val rows = JSONArray(request("/rest/v1/user_presence?select=user_id,is_online,is_dnd,is_typing,last_seen&user_id=in.(" +
+        val rows = JSONArray(request("/rest/v1/user_presence?select=user_id,is_online,is_dnd,is_typing,typing_conversation,last_seen&user_id=in.(" +
             ids.joinToString(",") + ")"))
         return buildMap {
             for (i in 0 until rows.length()) {
                 val row = rows.optJSONObject(i) ?: continue
                 val id = row.optString("user_id")
                 put(id, OrraUserPresence(id, row.optBoolean("is_online"), row.optBoolean("is_dnd"),
-                    row.optBoolean("is_typing"), row.optString("last_seen")))
+                    row.optBoolean("is_typing"), row.optString("typing_conversation").takeIf { it.isNotBlank() }, row.optString("last_seen")))
             }
         }
     }
