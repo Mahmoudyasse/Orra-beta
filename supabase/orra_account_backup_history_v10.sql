@@ -10,11 +10,11 @@ begin
   ));
   requested_name := regexp_replace(requested_name,'[^a-z0-9_.]','','g');
   if length(coalesce(requested_name,'')) < 3 then requested_name := 'user_' || substr(new.id::text,1,8); end if;
-  insert into public.profiles(id,username,phone_number)
-  values(new.id,requested_name,nullif(new.phone,'')) on conflict do nothing;
+  insert into public.profiles(id,username,phone_number,phone_verified)
+  values(new.id,requested_name,nullif(new.phone,''),new.phone_confirmed_at is not null) on conflict do nothing;
   if not exists(select 1 from public.profiles where id=new.id) then
-    insert into public.profiles(id,username,phone_number)
-    values(new.id,requested_name || '_' || substr(new.id::text,1,6),nullif(new.phone,''))
+    insert into public.profiles(id,username,phone_number,phone_verified)
+    values(new.id,requested_name || '_' || substr(new.id::text,1,6),nullif(new.phone,''),new.phone_confirmed_at is not null)
     on conflict(id) do nothing;
   end if;
   return new;
