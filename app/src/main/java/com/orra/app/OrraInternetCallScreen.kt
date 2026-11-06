@@ -97,7 +97,10 @@ fun OrraInternetCallScreen() {
     var callMessages by remember(callId) { mutableStateOf<List<OrraChatMessage>>(emptyList()) }
     var callConversationId by remember(callId) { mutableStateOf<String?>(null) }
     var callChatError by remember(callId) { mutableStateOf("") }
-    val chatApi = remember(callId) { SupabaseChatClient(context, SupabaseChatClient.DEFAULT_PROJECT_URL, SupabaseChatClient.DEFAULT_PUBLISHABLE_KEY, token, userId) }
+    val chatPrefs = remember { context.getSharedPreferences(SupabaseChatClient.PREFS, Context.MODE_PRIVATE) }
+    val chatProjectUrl = chatPrefs.getString("url", SupabaseChatClient.DEFAULT_PROJECT_URL).orEmpty()
+    val chatPublishableKey = chatPrefs.getString("key", SupabaseChatClient.DEFAULT_PUBLISHABLE_KEY).orEmpty()
+    val chatApi = remember(callId) { SupabaseChatClient(context, chatProjectUrl, chatPublishableKey, token, userId) }
     var permissionGranted by remember(callId) {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
