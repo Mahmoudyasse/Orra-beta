@@ -70,10 +70,19 @@ fun OrraApp() {
 
     var selected by remember { mutableIntStateOf(2) }
     Scaffold(bottomBar = { NeonBar(selected) { selected = it } }) { inner ->
-        Box(Modifier.fillMaxSize().padding(inner).statusBarsPadding()) {
-            if (selected == 2) DialerScreen()
-            else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(tabs[selected].label + " \u2014 coming soon")
+        Box(Modifier.fillMaxSize().padding(inner)) {
+            Box(Modifier.fillMaxSize().statusBarsPadding()) {
+                if (selected == 2) DialerScreen()
+                else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(tabs[selected].label + " — coming soon")
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 7.dp)
+            ) {
+                OrraDynamicIsland()
             }
         }
     }
