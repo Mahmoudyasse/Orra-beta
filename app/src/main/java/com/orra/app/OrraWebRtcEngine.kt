@@ -4,6 +4,7 @@ import android.content.Context
 import android.view.View
 import org.webrtc.*
 import org.webrtc.audio.JavaAudioDeviceModule
+import java.util.concurrent.Executors
 
 class OrraWebRtcEngine(
     private val context: Context,
@@ -28,6 +29,7 @@ class OrraWebRtcEngine(
     private var lastSignalId = 0L
     private var remoteDescriptionReady = false
     private val pendingIce = mutableListOf<IceCandidate>()
+    private val signalExecutor = Executors.newSingleThreadExecutor()
     var muted = false
         private set
     var cameraEnabled = true
@@ -104,12 +106,14 @@ class OrraWebRtcEngine(
         override fun onIceConnectionReceivingChange(receiving: Boolean) {}
         override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) {}
         override fun onIceCandidate(candidate: IceCandidate) {
-            runCatching {
-                signaling.sendSignal(callId, "ice", org.json.JSONObject()
-                    .put("sdp", candidate.sdp)
-                    .put("sdpMid", candidate.sdpMid)
-                    .put("sdpMLineIndex", candidate.sdpMLineIndex))
-            }.onFailure { onError(it.message ?: "Could not send network candidate.") }
+            signalExecutor.execute {
+                runCatching {
+                    signaling.sendSignal(callId, "ice", org.json.JSONObject()
+                        .put("sdp", candidate.sdp)
+                        .put("sdpMid", candidate.sdpMid)
+                        .put("sdpMLineIndex", candidate.sdpMLineIndex))
+                }.onFailure { onError(it.message ?: "Could not send network candidate.") }
+            }
         }
         override fun onIceCandidatesRemoved(candidates: Array<IceCandidate>) {}
         override fun onAddStream(stream: MediaStream) {
@@ -132,11 +136,13 @@ class OrraWebRtcEngine(
                 override fun onCreateSuccess(p0: SessionDescription?) {}
                 override fun onSetSuccess() {
                     val kind = if (description.type == SessionDescription.Type.OFFER) "offer" else "answer"
-                    runCatching {
-                        signaling.sendSignal(callId, kind, org.json.JSONObject()
-                            .put("type", description.type.canonicalForm())
-                            .put("sdp", description.description))
-                    }.onFailure { onError(it.message ?: "Could not send call setup data.") }
+                    signalExecutor.execute {
+                        runCatching {
+                            signaling.sendSignal(callId, kind, org.json.JSONObject()
+                                .put("type", description.type.canonicalForm())
+                                .put("sdp", description.description))
+                        }.onFailure { onError(it.message ?: "Could not send call setup data.") }
+                    }
                 }
                 override fun onCreateFailure(error: String) { onError(error) }
                 override fun onSetFailure(error: String) { onError(error) }
@@ -221,6 +227,7 @@ class OrraWebRtcEngine(
         runCatching { audioSource?.dispose() }
         runCatching { textureHelper?.dispose() }
         runCatching { factory?.dispose() }
+        signalExecutor.shutdownNow()
         runCatching { egl.release() }
     }
 }
