@@ -160,10 +160,11 @@ begin
   from jsonb_array_elements(coalesce(saved->'conversations','[]'::jsonb)) v
   on conflict(id) do nothing;
 
+  -- Restore only the backup owner's membership. Never silently re-add other people
+  -- who may have intentionally left the group after this backup was created.
   insert into public.conversation_members(conversation_id,user_id,joined_at)
-  select (v->>'conversation_id')::uuid,(v->>'user_id')::uuid,
-    coalesce((v->>'joined_at')::timestamptz,now())
-  from jsonb_array_elements(coalesce(saved->'memberships','[]'::jsonb)) v
+  select (v->>'id')::uuid,caller,now()
+  from jsonb_array_elements(coalesce(saved->'conversations','[]'::jsonb)) v
   on conflict(conversation_id,user_id) do nothing;
 
   insert into public.messages(id,conversation_id,sender_id,body,created_at,message_type,media_url,edited_at,deleted_for_everyone,reply_to)
