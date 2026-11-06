@@ -108,6 +108,7 @@ fun ContactsScreen() {
         hasWritePermission = hasContactPermission(context, Manifest.permission.WRITE_CONTACTS)
         permissionDenied = !hasReadPermission || !hasWritePermission
         if (hasReadPermission) refreshKey++
+        if (deletingContact != null && hasWritePermission) deleting = true
         if (showEditor && !hasWritePermission) editorError = "ORRA needs Contacts write permission to save changes."
     }
 
