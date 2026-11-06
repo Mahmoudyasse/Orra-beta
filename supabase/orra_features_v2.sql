@@ -253,11 +253,14 @@ create policy "Members read messages" on public.messages
 for select to authenticated
 using (
   public.is_orra_conversation_member(conversation_id)
-  and not exists (
-    select 1 from public.conversation_members cm
-    where cm.conversation_id = messages.conversation_id
-      and cm.user_id <> auth.uid()
-      and public.orra_users_blocked(auth.uid(), cm.user_id)
+  and (
+    exists (select 1 from public.conversations c where c.id = messages.conversation_id and c.is_group)
+    or not exists (
+      select 1 from public.conversation_members cm
+      where cm.conversation_id = messages.conversation_id
+        and cm.user_id <> auth.uid()
+        and public.orra_users_blocked(auth.uid(), cm.user_id)
+    )
   )
 );
 
@@ -267,11 +270,14 @@ for insert to authenticated
 with check (
   sender_id = auth.uid()
   and public.is_orra_conversation_member(conversation_id)
-  and not exists (
-    select 1 from public.conversation_members cm
-    where cm.conversation_id = messages.conversation_id
-      and cm.user_id <> auth.uid()
-      and public.orra_users_blocked(auth.uid(), cm.user_id)
+  and (
+    exists (select 1 from public.conversations c where c.id = messages.conversation_id and c.is_group)
+    or not exists (
+      select 1 from public.conversation_members cm
+      where cm.conversation_id = messages.conversation_id
+        and cm.user_id <> auth.uid()
+        and public.orra_users_blocked(auth.uid(), cm.user_id)
+    )
   )
 );
 
