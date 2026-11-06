@@ -12,6 +12,7 @@ import java.io.File
 import java.io.FileInputStream
 
 data class OrraChatUser(val id: String, val username: String)
+data class OrraBlockedUser(val id: String, val username: String)
 data class OrraChatConversation(
     val id: String, val username: String, val lastMessage: String,
     val isGroup: Boolean = false, val memberCount: Int = 2, val peerUserId: String? = null, val peerPhone: String? = null
@@ -349,6 +350,17 @@ class SupabaseChatClient(
     fun unblockUser(userId: String) {
         request("/rest/v1/blocked_users?blocker_id=eq." + encode(currentUserId.orEmpty()) +
             "&blocked_id=eq." + encode(userId), "DELETE")
+    }
+
+    fun loadBlockedUsers(): List<OrraBlockedUser> {
+        val uid = currentUserId ?: return emptyList()
+        val rows = JSONArray(request("/rest/v1/blocked_users?select=blocked_id&blocker_id=eq." + encode(uid)))
+        return (0 until rows.length()).mapNotNull { i ->
+            val id = rows.optJSONObject(i)?.optString("blocked_id").orEmpty()
+            if (id.isBlank()) return@mapNotNull null
+            val profile = JSONArray(request("/rest/v1/profiles?select=username&id=eq." + encode(id) + "&limit=1"))
+            OrraBlockedUser(id, profile.optJSONObject(0)?.optString("username").orEmpty().ifBlank { "ORRA user" })
+        }
     }
 
     fun updatePresence(online: Boolean, dnd: Boolean, typing: Boolean, conversationId: String? = null) {
