@@ -1,7 +1,7 @@
 package com.orra.app
 
-import android.content.Intent
-import android.net.Uri
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +23,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import java.text.DateFormat
 import java.util.Date
 
@@ -43,6 +46,14 @@ fun CallsScreen() {
     var entries by remember { mutableStateOf(readOrraCallHistory(context)) }
     var query by remember { mutableStateOf("") }
     var showClearDialog by remember { mutableStateOf(false) }
+    var pendingCall by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val callPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val pending = pendingCall
+        pendingCall = null
+        if (granted && pending != null) placeOrraCall(context, pending.first, pending.second)
+    }
     val filteredEntries = remember(entries, query) {
         if (query.isBlank()) entries
         else entries.filter {
@@ -126,9 +137,12 @@ fun CallsScreen() {
                             )
                         }
                         IconButton(onClick = {
-                            context.startActivity(Intent(Intent.ACTION_DIAL).apply {
-                                data = Uri.parse("tel:" + Uri.encode(entry.number))
-                            })
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
+                                placeOrraCall(context, entry.name, entry.number)
+                            } else {
+                                pendingCall = entry.name to entry.number
+                                callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+                            }
                         }) {
                             Icon(Icons.Default.Call, contentDescription = "Open dialer for ${entry.name}", tint = CallGreen)
                         }
