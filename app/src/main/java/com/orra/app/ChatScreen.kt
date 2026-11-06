@@ -78,6 +78,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -503,7 +504,7 @@ fun ChatScreen() {
             Text(if (isSignUp) "Create your account" else "Sign in")
             if (isSignUp) OutlinedTextField(requestedUsername, { requestedUsername = it }, Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true)
             OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email") }, singleLine = true)
-            OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true)
+            OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
             Button(enabled = !busy && email.contains("@") && password.length >= 8 && (!isSignUp || requestedUsername.length >= 3),
                 onClick = {
                     val api = SupabaseChatClient(context, projectUrl, publishableKey)
@@ -762,6 +763,18 @@ fun ChatScreen() {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(formatChatTimestamp(message.createdAt),
                                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (mine && message.receiptStatus != null) {
+                                    Text(
+                                        when (message.receiptStatus) {
+                                            "read" -> "✓✓ Read"
+                                            "delivered" -> "✓✓ Delivered"
+                                            else -> "✓ Sent"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (message.receiptStatus == "read") MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
