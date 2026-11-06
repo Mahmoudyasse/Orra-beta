@@ -125,6 +125,7 @@ fun ChatScreen() {
     var coverPreview by remember { mutableStateOf<String?>(null) }
     var selectedMessage by remember { mutableStateOf<OrraChatMessage?>(null) }
     var editText by remember { mutableStateOf("") }
+    var messageHistory by remember { mutableStateOf<List<String>>(emptyList()) }
     var chatTheme by remember(selected?.id) {
         mutableStateOf(prefs.getString("chat_theme_${selected?.id}", "liquid") ?: "liquid")
     }
@@ -237,6 +238,13 @@ fun ChatScreen() {
                 delay(3500)
             }
         }
+    }
+
+    LaunchedEffect(selectedMessage?.id, client) {
+        val target = selectedMessage
+        if (target != null && client != null) {
+            messageHistory = runCatching { withContext(Dispatchers.IO) { client.loadMessageHistory(target.id) } }.getOrDefault(emptyList())
+        } else messageHistory = emptyList()
     }
 
     LaunchedEffect(token, client) {
@@ -634,15 +642,17 @@ fun ChatScreen() {
             title = { Text("Message options") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (message.senderId == userId && !message.deletedForEveryone && message.type == "text") {
-                        OutlinedTextField(editText, { editText = it }, label = { Text("Edit message") }, maxLines = 4)
-                        TextButton(onClick = {
-                            runTask {
-                                withContext(Dispatchers.IO) { client!!.editMessage(message.id, editText) }
-                                messages = withContext(Dispatchers.IO) { client!!.loadMessages(selected!!.id) }
-                            }
-                            selectedMessage = null
-                        }) { Text("Save edit") }
+                    if (message.senderId == userId && !message.deletedForEveryone) {
+                        if (message.type == "text") {
+                            OutlinedTextField(editText, { editText = it }, label = { Text("Edit message") }, maxLines = 4)
+                            TextButton(onClick = {
+                                runTask {
+                                    withContext(Dispatchers.IO) { client!!.editMessage(message.id, editText) }
+                                    messages = withContext(Dispatchers.IO) { client!!.loadMessages(selected!!.id) }
+                                }
+                                selectedMessage = null
+                            }) { Text("Save edit") }
+                        }
                         TextButton(onClick = {
                             runTask {
                                 withContext(Dispatchers.IO) { client!!.deleteMessageForEveryone(message.id) }
@@ -650,6 +660,10 @@ fun ChatScreen() {
                             }
                             selectedMessage = null
                         }) { Text("Delete for everyone", color = MaterialTheme.colorScheme.error) }
+                    }
+                    if (messageHistory.isNotEmpty()) {
+                        Text("Message history", fontWeight = FontWeight.SemiBold)
+                        messageHistory.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
                     }
                     TextButton(onClick = {
                         runTask {
