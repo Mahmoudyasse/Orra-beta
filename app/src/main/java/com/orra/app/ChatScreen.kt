@@ -170,6 +170,7 @@ fun ChatScreen() {
     var selected by remember { mutableStateOf<OrraChatConversation?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+    var backupStatus by remember { mutableStateOf("") }
     var showProfile by remember { mutableStateOf(false) }
     var showGroup by remember { mutableStateOf(false) }
     var showChatOptions by remember { mutableStateOf(false) }
@@ -482,6 +483,10 @@ fun ChatScreen() {
                 avatarPreview = loaded.avatarUrl
                 coverPreview = loaded.coverUrl
             }.onFailure { error = it.message ?: "Profile could not be loaded." }
+            runCatching {
+                val backupId = withContext(Dispatchers.IO) { client.ensureDailyCloudBackup() }
+                backupStatus = if (backupId != null) "Cloud chat backup is up to date." else "Cloud backup is not available yet."
+            }.onFailure { backupStatus = "Cloud backup pending: " + (it.message ?: "connection error") }
         }
     }
 
@@ -540,6 +545,7 @@ fun ChatScreen() {
             }
             if (authMethod == "email") {
                 Text(if (isSignUp) "Create your account" else "Sign in")
+            if (backupStatus.isNotBlank()) Text(backupStatus, style = MaterialTheme.typography.labelSmall)
                 if (isSignUp) OutlinedTextField(requestedUsername, { requestedUsername = it }, Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true)
                 OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email") }, singleLine = true)
                 OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
