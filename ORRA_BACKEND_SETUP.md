@@ -12,8 +12,9 @@ Run each file in the Supabase SQL Editor, once, in this order:
 6. `supabase/orra_security_v5.sql`
 7. `supabase/orra_attachments_v6.sql`
 8. `supabase/orra_direct_messages_v7.sql`
+9. `supabase/orra_storage_upsert_v8.sql`
 
-The reliability migration adds message delivery/read receipts and restricts call acceptance to the callee. The security migration removes anonymous execution from the app RPCs and adds missing foreign-key indexes. The attachment migration allows generic Android document-provider files while keeping the bucket private and capped at 20 MB. The direct-message migration ensures a DM is never accidentally opened as a group chat.
+The reliability migration adds message delivery/read receipts and restricts call acceptance to the callee. The security migration removes anonymous execution from the app RPCs and adds missing foreign-key indexes. The attachment migration allows generic Android document-provider files while keeping the bucket private and capped at 20 MB. The direct-message migration ensures a DM is never accidentally opened as a group chat. The storage upsert migration grants safe owner-only UPDATE permission required by Supabase Storage upsert.
 
 ## Enable email confirmation deep links
 
@@ -53,7 +54,7 @@ The Edge Function generates short-lived, user-scoped credentials. Without these 
 
 ## Current backend deployment state
 
-- SQL migrations 1–8 are applied to project `bmehobgcdjtnbwsdgjxg`.
+- SQL migrations 1–9 are applied to project `bmehobgcdjtnbwsdgjxg`.
 - `orra-turn-credentials` Edge Function is deployed with JWT verification enabled.
 - Chat and profile buckets are private; chat files are capped at 20 MB and profile images at 5 MB.
 - Database smoke tests for conversation creation, message receipts, message edit/delete, group creation, and call signaling/accept/end ran inside a rolled-back transaction.
