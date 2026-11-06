@@ -57,10 +57,10 @@ fun InCallScreen() {
             } else {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(modifier = Modifier.weight(1f), onClick = {
-                        OrraCallState.setMuted(!OrraCallState.muted)
+                        OrraCallState.updateMute(!OrraCallState.muted)
                     }) { Text(if (OrraCallState.muted) "Unmute" else "Mute") }
                     OutlinedButton(modifier = Modifier.weight(1f), onClick = {
-                        OrraCallState.setSpeaker(!OrraCallState.speaker)
+                        OrraCallState.updateSpeaker(!OrraCallState.speaker)
                     }) { Text(if (OrraCallState.speaker) "Earpiece" else "Speaker") }
                 }
                 Spacer(Modifier.height(10.dp))
