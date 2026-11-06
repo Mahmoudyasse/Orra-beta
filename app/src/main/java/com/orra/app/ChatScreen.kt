@@ -5,9 +5,16 @@ import android.content.ContentProviderOperation
 import android.content.pm.PackageManager
 import android.provider.ContactsContract
 import android.content.Context
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.os.Build
+import android.os.Bundle
+import android.os.Looper
 import android.media.MediaPlayer
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -69,6 +76,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -77,6 +86,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import java.io.File
 
 private fun saveOrraContact(context: Context, name: String, number: String) {
@@ -125,6 +135,12 @@ fun ChatScreen() {
     var requestedUsername by remember { mutableStateOf("") }
     var isSignUp by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
+    var chatSearch by remember { mutableStateOf("") }
+    var chatSearchVisible by remember { mutableStateOf(false) }
+    var showAttachmentMenu by remember { mutableStateOf(false) }
+    var showContactShare by remember { mutableStateOf(false) }
+    var contactShareName by remember { mutableStateOf("") }
+    var contactShareNumber by remember { mutableStateOf("") }
     var messageText by remember { mutableStateOf("") }
     var users by remember { mutableStateOf<List<OrraChatUser>>(emptyList()) }
     var selectedUsers by remember { mutableStateOf(setOf<String>()) }
@@ -160,6 +176,7 @@ fun ChatScreen() {
     var voiceStatus by remember { mutableStateOf("") }
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     val recorder = remember { OrraVoiceRecorder(context.cacheDir) }
+    val clipboard = LocalClipboardManager.current
     val startCellularCall = rememberOrraCallAction()
     val startCarrierVideoCall = rememberOrraCallAction(video = true)
     val configured = projectUrl.startsWith("https://") && publishableKey.isNotBlank()
@@ -183,6 +200,30 @@ fun ChatScreen() {
         val active = selected ?: return
         val api = client ?: return
         runTask { messages = withContext(Dispatchers.IO) { api.loadMessages(active.id) } }
+    }
+
+    BackHandler(enabled = selected != null || showProfile || showGroup || showChatOptions || selectedMessage != null || showAttachmentMenu || showContactShare) {
+        when {
+            showContactShare -> showContactShare = false
+            showAttachmentMenu -> showAttachmentMenu = false
+            selectedMessage != null -> selectedMessage = null
+            showChatOptions -> showChatOptions = false
+            showGroup -> { showGroup = false; addingToGroup = null }
+            showProfile -> showProfile = false
+            selected != null -> { selected = null; messages = emptyList(); chatSearch = ""; chatSearchVisible = false }
+        }
+    }
+
+    fun shareLocation(location: Location) {
+        val active = selected ?: return
+        val api = client ?: return
+        val lat = String.format(Locale.US, "%.6f", location.latitude)
+        val lon = String.format(Locale.US, "%.6f", location.longitude)
+        runTask {
+            withContext(Dispatchers.IO) { api.sendLocationMessage(active.id, lat, lon) }
+            messages = withContext(Dispatchers.IO) { api.loadMessages(active.id) }
+            showAttachmentMenu = false
+        }
     }
 
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
