@@ -2,6 +2,7 @@ package com.orra.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
@@ -29,6 +30,9 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,7 +48,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
+import android.app.Activity
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,6 +80,11 @@ fun OrraApp() {
     if (splash) { Splash(); return }
 
     var selected by remember { mutableIntStateOf(2) }
+    var showExitDialog by remember { mutableStateOf(false) }
+    val activity = LocalContext.current as? Activity
+    BackHandler(enabled = true) {
+        if (selected != 2) selected = 2 else showExitDialog = true
+    }
     Scaffold(bottomBar = { NeonBar(selected) { selected = it } }) { inner ->
         Box(Modifier.fillMaxSize().padding(inner)) {
             Box(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -96,6 +107,15 @@ fun OrraApp() {
                 OrraDynamicIsland()
             }
         }
+    }
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("Exit ORRA?") },
+            text = { Text("Press Exit to close the app, or Cancel to stay in ORRA.") },
+            confirmButton = { TextButton(onClick = { showExitDialog = false; activity?.finish() }) { Text("Exit") } },
+            dismissButton = { Button(onClick = { showExitDialog = false }) { Text("Stay in ORRA") } }
+        )
     }
 }
 
