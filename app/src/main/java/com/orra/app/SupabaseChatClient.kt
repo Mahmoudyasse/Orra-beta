@@ -17,7 +17,7 @@ data class OrraChatConversation(
 data class OrraChatMessage(
     val id: String, val senderId: String, val body: String, val createdAt: String,
     val type: String = "text", val mediaUrl: String? = null, val editedAt: String? = null,
-    val deletedForEveryone: Boolean = false
+    val deletedForEveryone: Boolean = false, val senderUsername: String = ""
 )
 data class OrraChatProfile(
     val username: String, val displayName: String, val bio: String, val phoneNumber: String,
@@ -163,15 +163,22 @@ class SupabaseChatClient(
             "/rest/v1/message_deletions?select=message_id&user_id=eq." + encode(currentUserId.orEmpty())
         ))
         val hidden = (0 until deletions.length()).mapNotNull { deletions.optJSONObject(it)?.optString("message_id") }.toSet()
+        val senderIds = (0 until rows.length()).mapNotNull { rows.optJSONObject(it)?.optString("sender_id") }.distinct()
+        val senderNames = mutableMapOf<String, String>()
+        senderIds.forEach { senderId ->
+            val profileRows = JSONArray(request("/rest/v1/profiles?select=username&id=eq." + encode(senderId) + "&limit=1"))
+            senderNames[senderId] = profileRows.optJSONObject(0)?.optString("username").orEmpty()
+        }
         return (0 until rows.length()).mapNotNull { i ->
             val row = rows.optJSONObject(i) ?: return@mapNotNull null
             if (row.optString("id") in hidden) return@mapNotNull null
             val deleted = row.optBoolean("deleted_for_everyone")
-            OrraChatMessage(row.optString("id"), row.optString("sender_id"),
+            val sender = row.optString("sender_id")
+            OrraChatMessage(row.optString("id"), sender,
                 if (deleted) "This message was deleted" else row.optString("body"),
                 row.optString("created_at"), row.optString("message_type", "text"),
                 row.optString("media_url").takeIf { it.isNotBlank() }?.let { createSignedMediaUrl("orra-chat-media", it) },
-                row.optString("edited_at").takeIf { it.isNotBlank() }, deleted)
+                row.optString("edited_at").takeIf { it.isNotBlank() }, deleted, senderNames[sender].orEmpty())
         }
     }
 
