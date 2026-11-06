@@ -22,6 +22,15 @@ In Supabase Dashboard:
 
 The app handles the access and refresh tokens returned in the callback fragment. If email confirmation is disabled, password sign-in returns a session immediately.
 
+## Enable Google sign-in
+
+- In Supabase Dashboard → Authentication → Providers, enable Google.
+- Add the Google OAuth Client ID and Client Secret from the Google Cloud OAuth client registered for this app.
+- Add the Supabase callback URL shown in the Google provider settings to the Google Cloud OAuth client's authorized redirect URIs.
+- Add `com.orra.beta://auth-callback/` to Supabase Redirect URLs as above.
+
+The app's Google button starts Supabase OAuth in the browser. It does not grant Gmail mailbox access; Gmail data access would require separate Google scopes and consent.
+
 ## Configure TURN for reliable calls across networks
 
 The Android client always has a public STUN fallback. TURN is needed for restrictive NATs, carrier networks, and some Wi-Fi networks.
