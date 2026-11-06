@@ -603,7 +603,7 @@ fun ChatScreen() {
         if (demoMode || !configured) {
             Text("ORRA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Surface(Modifier.fillMaxWidth().clickable { demoMode = true; selected = OrraChatConversation("demo-local", "Demo Contact", "Local demo chat", peerUserId = "demo-peer"); messages = emptyList() }, shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Person, null); Column(Modifier.weight(1f).padding(start = 12.dp)) { Text("Demo Contact", fontWeight = FontWeight.SemiBold); Text("Try sending a message without signing in", style = MaterialTheme.typography.bodySmall) }; Icon(Icons.Default.ChevronRight, null) }
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Person, null); Column(Modifier.weight(1f).padding(start = 12.dp)) { Text("Demo Contact", fontWeight = FontWeight.SemiBold); Text("Try sending a message without signing in", style = MaterialTheme.typography.bodySmall) }; Icon(Icons.Default.ArrowForward, null) }
             }
             if (demoMode && selected?.id == "demo-local") {
                 Text("Demo chat is active. Replies are simulated on this device.", style = MaterialTheme.typography.bodySmall)
