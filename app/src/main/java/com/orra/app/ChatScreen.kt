@@ -855,12 +855,25 @@ fun ChatScreen() {
                 }
                 OutlinedTextField(messageText, { messageText = it }, Modifier.weight(1f),
                     placeholder = { Text("Message") }, maxLines = 4)
-                IconButton(enabled = messageText.isNotBlank() && !busy, onClick = {
+                IconButton(enabled = messageText.isNotBlank() && !busy && selected != null && client != null, onClick = {
                     val body = messageText.trim()
-                    messageText = ""
-                    runTask {
-                        withContext(Dispatchers.IO) { client!!.sendMessage(selected!!.id, body) }
-                        messages = withContext(Dispatchers.IO) { client!!.loadMessages(selected!!.id) }
+                    val active = selected
+                    val api = client
+                    if (body.isNotBlank() && active != null && api != null) {
+                        scope.launch {
+                            busy = true
+                            error = ""
+                            messageText = ""
+                            try {
+                                withContext(Dispatchers.IO) { api.sendMessage(active.id, body) }
+                                messages = withContext(Dispatchers.IO) { api.loadMessages(active.id) }
+                            } catch (e: Exception) {
+                                messageText = body
+                                error = e.message ?: "Message could not be sent. Your text has been restored."
+                            } finally {
+                                busy = false
+                            }
+                        }
                     }
                 }) { Icon(Icons.Default.Send, contentDescription = "Send") }
             }
