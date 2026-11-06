@@ -135,6 +135,11 @@ fun ChatScreen() {
     var requestedUsername by remember { mutableStateOf("") }
     var isSignUp by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
+    var conversationSearch by remember { mutableStateOf("") }
+    var chatSection by remember { mutableStateOf("all") }
+    var presenceByUser by remember { mutableStateOf<Map<String, OrraUserPresence>>(emptyMap()) }
+    var activePeerPresence by remember { mutableStateOf<OrraUserPresence?>(null) }
+    var dndEnabled by remember { mutableStateOf(prefs.getBoolean("orra_dnd_enabled", false)) }
     var chatSearch by remember { mutableStateOf("") }
     var chatSearchVisible by remember { mutableStateOf(false) }
     var showAttachmentMenu by remember { mutableStateOf(false) }
@@ -364,12 +369,51 @@ fun ChatScreen() {
         if (signedIn && client != null) {
             while (true) {
                 try {
-                    if (selected == null) conversations = withContext(Dispatchers.IO) { client.loadConversations() }
-                    else messages = withContext(Dispatchers.IO) { client.loadMessages(selected!!.id) }
+                    if (selected == null) {
+                        val loaded = withContext(Dispatchers.IO) { client.loadConversations() }
+                        conversations = loaded
+                        presenceByUser = withContext(Dispatchers.IO) {
+                            client.loadPresence(loaded.mapNotNull { it.peerUserId })
+                        }
+                    } else messages = withContext(Dispatchers.IO) { client.loadMessages(selected!!.id) }
                 } catch (e: Exception) { error = e.message ?: "Could not refresh chats." }
                 delay(3500)
             }
         }
+    }
+
+    LaunchedEffect(token, client, dndEnabled) {
+        if (signedIn && client != null) {
+            while (true) {
+                runCatching { withContext(Dispatchers.IO) { client.updatePresence(true, dndEnabled, false, null) } }
+                delay(12000)
+            }
+        }
+    }
+
+    LaunchedEffect(messageText, selected?.id, token, client) {
+        if (signedIn && client != null && selected != null && messageText.isNotBlank()) {
+            delay(550)
+            runCatching {
+                withContext(Dispatchers.IO) { client.updatePresence(true, dndEnabled, true, selected!!.id) }
+            }
+            delay(2600)
+            runCatching {
+                withContext(Dispatchers.IO) { client.updatePresence(true, dndEnabled, false, null) }
+            }
+        }
+    }
+
+    LaunchedEffect(selected?.peerUserId, client, dndEnabled) {
+        val peer = selected?.peerUserId
+        if (signedIn && client != null && !peer.isNullOrBlank()) {
+            while (true) {
+                activePeerPresence = runCatching {
+                    withContext(Dispatchers.IO) { client.loadPresence(listOf(peer))[peer] }
+                }.getOrNull()
+                delay(5000)
+            }
+        } else activePeerPresence = null
     }
 
     LaunchedEffect(selectedMessage?.id, client) {
