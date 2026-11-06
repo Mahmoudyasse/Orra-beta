@@ -345,11 +345,11 @@ class SupabaseChatClient(
 
     fun loadMyProfile(): OrraChatProfile {
         val uid = currentUserId ?: throw IllegalStateException("Sign in again.")
-        val rows = JSONArray(request("/rest/v1/profiles?select=username,display_name,bio,phone_number,avatar_url,cover_url&id=eq." + encode(uid) + "&limit=1"))
+        val rows = JSONArray(request("/rest/v1/profiles?select=username,display_name,bio,phone_number,phone_verified,avatar_url,cover_url&id=eq." + encode(uid) + "&limit=1"))
         val row = rows.optJSONObject(0) ?: throw IllegalStateException("Profile not found.")
         return OrraChatProfile(row.optString("username"),
             row.optString("display_name").ifBlank { row.optString("username") },
-            row.optString("bio"), row.optString("phone_number"), row.optString("avatar_url").takeIf { it.isNotBlank() }?.let { createSignedMediaUrl("orra-profiles", it) },
+            row.optString("bio"), if (row.optBoolean("phone_verified")) row.optString("phone_number") else "", row.optString("avatar_url").takeIf { it.isNotBlank() }?.let { createSignedMediaUrl("orra-profiles", it) },
             row.optString("cover_url").takeIf { it.isNotBlank() }?.let { createSignedMediaUrl("orra-profiles", it) })
     }
 
