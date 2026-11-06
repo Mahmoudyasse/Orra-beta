@@ -67,6 +67,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -306,8 +307,16 @@ fun ChatScreen() {
         else -> MaterialTheme.colorScheme.background
     }
 
+    val chatSurface = if (selected != null && chatTheme == "liquid") {
+        Modifier.background(Brush.linearGradient(listOf(
+            Color(0xFF0B111A), Color(0xFF17152B), Color(0xFF101C26)
+        )))
+    } else {
+        Modifier.background(if (selected != null) chatBackground else MaterialTheme.colorScheme.background)
+    }
+
     Column(
-        Modifier.fillMaxSize().background(if (selected != null) chatBackground else MaterialTheme.colorScheme.background)
+        Modifier.fillMaxSize().then(chatSurface)
             .padding(start = 16.dp, end = 16.dp, top = 58.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -435,7 +444,8 @@ fun ChatScreen() {
                 }
                 Column(Modifier.weight(1f)) {
                     Text(selected!!.username, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(if (selected!!.isGroup) "Group • ${selected!!.memberCount} members" else "ORRA conversation",
+                    Text(if (selected!!.isGroup) "Group • ${selected!!.memberCount} members"
+                        else selected!!.peerPhone?.takeIf { it.isNotBlank() } ?: "ORRA conversation",
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (!selected!!.isGroup) {
