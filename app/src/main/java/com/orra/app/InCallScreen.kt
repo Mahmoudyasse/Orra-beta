@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +40,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 
 @Composable
 fun InCallScreen() {
+    BackHandler(enabled = true) { }
     val context = LocalContext.current
     val call = OrraCallState.activeCall
     val number = call?.details?.handle?.schemeSpecificPart.orEmpty()
