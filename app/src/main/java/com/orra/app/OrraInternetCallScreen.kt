@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +38,7 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.webrtc.SurfaceViewRenderer
 
@@ -73,6 +75,7 @@ object OrraInternetCallState {
 @Composable
 fun OrraInternetCallScreen() {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val callId = OrraInternetCallState.callId ?: return
     val video = OrraInternetCallState.callType == "video"
     val token = OrraInternetCallState.accessToken
@@ -123,8 +126,24 @@ fun OrraInternetCallScreen() {
                 }
                 val session = withContext(Dispatchers.IO) { api.call(callId) }
                 if (session == null || session.status in setOf("ended", "rejected", "missed")) {
-                    status = if (session?.status == "rejected") "Call declined" else "Call ended"
+                    status = when (session?.status) {
+                        "rejected" -> "Call declined"
+                        "missed" -> "No answer"
+                        else -> "Call ended"
+                    }
+                    delay(1400)
+                    if (OrraInternetCallState.callId == callId) OrraInternetCallState.clear()
                     break
+                }
+                if (session.status == "ringing") {
+                    val created = runCatching { java.time.Instant.parse(session.createdAt) }.getOrNull()
+                    if (created != null && java.time.Instant.now().isAfter(created.plusSeconds(60))) {
+                        runCatching { withContext(Dispatchers.IO) { api.updateStatus(callId, "missed") } }
+                        status = "No answer"
+                        delay(1400)
+                        if (OrraInternetCallState.callId == callId) OrraInternetCallState.clear()
+                        break
+                    }
                 }
                 if (session.status == "accepted" && status.startsWith("Calling")) status = "Connecting…"
                 delay(900)
@@ -137,6 +156,7 @@ fun OrraInternetCallScreen() {
     DisposableEffect(callId) {
         onDispose {
             runCatching { engine?.release() }
+            if (!video) { runCatching { localRenderer.release() }; runCatching { remoteRenderer.release() } }
             val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             audio.mode = AudioManager.MODE_NORMAL
             audio.isSpeakerphoneOn = false
@@ -197,10 +217,14 @@ fun OrraInternetCallScreen() {
         }
         Spacer(Modifier.height(16.dp))
         Button(onClick = {
-            val api = OrraCallSignaling(context, userId, token)
-            runCatching { api.sendSignal(callId, "hangup", org.json.JSONObject()) }
-            runCatching { api.updateStatus(callId, "ended") }
-            OrraInternetCallState.clear()
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    val api = OrraCallSignaling(context, userId, token)
+                    runCatching { api.sendSignal(callId, "hangup", org.json.JSONObject()) }
+                    runCatching { api.updateStatus(callId, "ended") }
+                }
+                if (OrraInternetCallState.callId == callId) OrraInternetCallState.clear()
+            }
         }) { Text("End call") }
     }
 }
