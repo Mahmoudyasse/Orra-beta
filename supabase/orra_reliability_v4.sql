@@ -56,7 +56,7 @@ begin
     and m.conversation_id=target_conversation and m.sender_id<>auth.uid()
     and r.delivered_at is null;
 end;
-$;
+$$;
 
 create or replace function public.orra_mark_conversation_read(target_conversation uuid)
 returns void language plpgsql security definer set search_path=public as $$
@@ -71,7 +71,7 @@ begin
     and m.conversation_id=target_conversation and m.sender_id<>auth.uid()
     and r.read_at is null;
 end;
-$;
+$$;
 grant execute on function public.orra_mark_conversation_delivered(uuid) to authenticated;
 grant execute on function public.orra_mark_conversation_read(uuid) to authenticated;
 
