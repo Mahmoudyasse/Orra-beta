@@ -7,14 +7,15 @@ import org.json.JSONObject
 data class OrraCallEntry(
     val name: String,
     val number: String,
-    val timestamp: Long
+    val timestamp: Long,
+    val direction: String = "Outgoing"
 )
 
 private const val CALL_PREFS = "orra_call_history"
 private const val CALLS_KEY = "entries"
 private const val MAX_CALLS = 50
 
-fun recordOrraCall(context: Context, name: String, number: String) {
+fun recordOrraCall(context: Context, name: String, number: String, direction: String = "Outgoing") {
     if (number.isBlank()) return
     val prefs = context.getSharedPreferences(CALL_PREFS, Context.MODE_PRIVATE)
     val current = runCatching { JSONArray(prefs.getString(CALLS_KEY, "[]")) }.getOrDefault(JSONArray())
@@ -23,6 +24,7 @@ fun recordOrraCall(context: Context, name: String, number: String) {
         put("name", name.ifBlank { number })
         put("number", number)
         put("timestamp", System.currentTimeMillis())
+        put("direction", direction)
     })
     for (i in 0 until minOf(current.length(), MAX_CALLS - 1)) {
         updated.put(current.getJSONObject(i))
@@ -43,7 +45,8 @@ fun readOrraCallHistory(context: Context): List<OrraCallEntry> {
                     OrraCallEntry(
                         name = item.optString("name", number),
                         number = number,
-                        timestamp = item.optLong("timestamp")
+                        timestamp = item.optLong("timestamp"),
+                        direction = item.optString("direction", "Outgoing")
                     )
                 )
             }
