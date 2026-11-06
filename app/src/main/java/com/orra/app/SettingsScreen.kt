@@ -230,7 +230,7 @@ fun SettingsScreen() {
                             proxyStatus = try {
                                 withContext(Dispatchers.IO) { backupClient!!.testConnection() }
                                 "Connected: Supabase API is reachable using the current connection settings."
-                            } catch (e: Exception) { "Connection failed: " + (e.message ?: "check the proxy and network.") }
+                            } catch (e: Exception) { android.util.Log.w("ORRA", "Proxy test failed", e); "" }
                             proxyBusy = false
                         }
                     }
@@ -251,7 +251,7 @@ fun SettingsScreen() {
                         backupStatus = try {
                             val id = withContext(Dispatchers.IO) { backupClient!!.createCloudBackupNow() }
                             "Backup saved: " + id.take(8)
-                        } catch (e: Exception) { e.message ?: "Backup failed." }
+                        } catch (e: Exception) { android.util.Log.w("ORRA", "Backup failed", e); "" }
                         backupBusy = false
                     }
                 }, modifier = Modifier.fillMaxWidth()) { Text(if (backupBusy) "Working…" else "Back up chats now") }
@@ -261,7 +261,7 @@ fun SettingsScreen() {
                         backupStatus = try {
                             val count = withContext(Dispatchers.IO) { backupClient!!.restoreLatestCloudBackup() }
                             "Restore complete. $count missing messages restored."
-                        } catch (e: Exception) { e.message ?: "Restore failed." }
+                        } catch (e: Exception) { android.util.Log.w("ORRA", "Restore failed", e); "" }
                         backupBusy = false
                     }
                 }, modifier = Modifier.fillMaxWidth()) { Text("Restore latest backup") }
@@ -306,7 +306,7 @@ fun SettingsScreen() {
                             blockedUsers = withContext(Dispatchers.IO) { backupClient!!.loadBlockedUsers() }
                             blockedStatus = ""
                             showBlocked = true
-                        }.onFailure { blockedStatus = it.message ?: "Could not load blocked contacts." }
+                        }.onFailure { android.util.Log.w("ORRA", "Blocked contacts load failed", it); blockedStatus = "" }
                     }
                 }) { Text("Blocked contacts") }
                 if (blockedStatus.isNotBlank()) Text(blockedStatus, style = MaterialTheme.typography.bodySmall)
@@ -331,7 +331,7 @@ fun SettingsScreen() {
                                     runCatching {
                                         withContext(Dispatchers.IO) { backupClient!!.unblockUser(blocked.id) }
                                         blockedUsers = blockedUsers.filterNot { it.id == blocked.id }
-                                    }.onFailure { blockedStatus = it.message ?: "Could not unblock user." }
+                                    }.onFailure { android.util.Log.w("ORRA", "Unblock failed", it); blockedStatus = "" }
                                 }
                             }) { Text("Unblock") }
                         }
