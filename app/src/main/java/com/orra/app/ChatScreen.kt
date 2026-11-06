@@ -660,6 +660,30 @@ fun ChatScreen() {
                     }) {
                         Icon(Icons.Default.Videocam, contentDescription = "Carrier video call")
                     }
+                    IconButton(onClick = {
+                        val peerId = selected!!.peerUserId
+                        if (peerId.isNullOrBlank()) error = "This ORRA user ID is unavailable."
+                        else runTask {
+                            val call = withContext(Dispatchers.IO) {
+                                OrraCallSignaling(context, userId, token).createCall(peerId, "audio")
+                            }
+                            OrraInternetCallState.begin(call, selected!!.username, true, userId, token)
+                        }
+                    }) {
+                        Icon(Icons.Default.Call, contentDescription = "ORRA internet voice call", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = {
+                        val peerId = selected!!.peerUserId
+                        if (peerId.isNullOrBlank()) error = "This ORRA user ID is unavailable."
+                        else runTask {
+                            val call = withContext(Dispatchers.IO) {
+                                OrraCallSignaling(context, userId, token).createCall(peerId, "video")
+                            }
+                            OrraInternetCallState.begin(call, selected!!.username, true, userId, token)
+                        }
+                    }) {
+                        Icon(Icons.Default.Videocam, contentDescription = "ORRA internet video call", tint = MaterialTheme.colorScheme.primary)
+                    }
                 } else {
                     IconButton(onClick = { addingToGroup = selected; showGroup = true; selectedUsers = emptySet() }) {
                         Icon(Icons.Default.Add, contentDescription = "Add members")
