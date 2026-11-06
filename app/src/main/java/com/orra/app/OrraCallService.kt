@@ -15,12 +15,12 @@ object OrraCallState {
     var speaker by mutableStateOf(false)
     var service: OrraInCallService? = null
 
-    fun setMuted(value: Boolean) {
+    fun updateMute(value: Boolean) {
         muted = value
         service?.setMuted(value)
     }
 
-    fun setSpeaker(value: Boolean) {
+    fun updateSpeaker(value: Boolean) {
         speaker = value
         service?.setAudioRoute(if (value) CallAudioState.ROUTE_SPEAKER else CallAudioState.ROUTE_EARPIECE)
     }
