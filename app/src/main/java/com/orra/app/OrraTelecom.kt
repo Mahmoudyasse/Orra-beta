@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
+import android.telecom.VideoProfile
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -55,11 +56,12 @@ fun requestOrraDialerRole(activity: Activity) {
     }
 }
 
-private fun placeOrraCallOnAccount(context: Context, name: String, number: String, account: PhoneAccountHandle?) {
+private fun placeOrraCallOnAccount(context: Context, name: String, number: String, account: PhoneAccountHandle?, video: Boolean = false) {
     runCatching {
         recordOrraCall(context, name, number)
         val extras = Bundle()
         if (account != null) extras.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, account)
+        if (video) extras.putInt(TelecomManager.EXTRA_START_CALL_WITH_VIDEO_STATE, VideoProfile.STATE_BIDIRECTIONAL)
         context.getSystemService(TelecomManager::class.java).placeCall(Uri.fromParts("tel", number, null), extras)
     }.onFailure {
         Toast.makeText(context, "ORRA could not start this call. Check SIM and phone permissions.", Toast.LENGTH_LONG).show()
@@ -67,17 +69,17 @@ private fun placeOrraCallOnAccount(context: Context, name: String, number: Strin
 }
 
 @Composable
-fun rememberOrraCallAction(): (String, String) -> Unit {
+fun rememberOrraCallAction(video: Boolean = false): (String, String) -> Unit {
     val context = LocalContext.current
     val darkMode = isSystemInDarkTheme()
     val neon = Color(0xFF8B7DFF)
     val simShape = RoundedCornerShape(16.dp)
-    var pending by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var pending by remember { mutableStateOf<Triple<String, String, Boolean>?>(null) }
     var accounts by remember { mutableStateOf<List<PhoneAccountHandle>>(emptyList()) }
     var labels by remember { mutableStateOf<List<String>>(emptyList()) }
     var showPicker by remember { mutableStateOf(false) }
 
-    fun loadAccounts(request: Pair<String, String>) {
+    fun loadAccounts(request: Triple<String, String, Boolean>) {
         val telecom = context.getSystemService(TelecomManager::class.java)
         val available = runCatching { telecom.callCapablePhoneAccounts }.getOrDefault(emptyList())
         if (available.size > 1) {
@@ -90,7 +92,7 @@ fun rememberOrraCallAction(): (String, String) -> Unit {
             }
             pending = request
             showPicker = true
-        } else placeOrraCallOnAccount(context, request.first, request.second, available.firstOrNull())
+        } else placeOrraCallOnAccount(context, request.first, request.second, available.firstOrNull(), request.third)
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
@@ -99,13 +101,17 @@ fun rememberOrraCallAction(): (String, String) -> Unit {
         val phoneGranted = grants[Manifest.permission.READ_PHONE_STATE] == true ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
         val request = pending
+        val videoGranted = !video || (
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        )
         if (!callGranted) {
             pending = null
             Toast.makeText(context, "Allow Phone permission to place calls.", Toast.LENGTH_LONG).show()
         } else if (request != null) {
             pending = null
-            if (phoneGranted) loadAccounts(request)
-            else Toast.makeText(context, "Phone state permission is required to choose the SIM safely. Enable it and try again.", Toast.LENGTH_LONG).show()
+            if (phoneGranted && videoGranted) loadAccounts(request)
+            else Toast.makeText(context, if (!videoGranted) "Camera and microphone permissions are required for video calling." else "Phone state permission is required to choose the SIM safely.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -114,12 +120,16 @@ fun rememberOrraCallAction(): (String, String) -> Unit {
             if (!isOrraDefaultDialer(context)) {
                 Toast.makeText(context, "Set ORRA as the default phone app in Settings first.", Toast.LENGTH_LONG).show()
             } else {
-                val request = name to number
+                val request = Triple(name, number, video)
                 val missing = buildList {
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED)
                         add(Manifest.permission.CALL_PHONE)
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED)
                         add(Manifest.permission.READ_PHONE_STATE)
+                    if (video && ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED)
+                        add(Manifest.permission.CAMERA)
+                    if (video && ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+                        add(Manifest.permission.RECORD_AUDIO)
                 }
                 if (missing.isEmpty()) loadAccounts(request)
                 else {
@@ -154,7 +164,7 @@ fun rememberOrraCallAction(): (String, String) -> Unit {
                                 val account = accounts.getOrNull(index)
                                 showPicker = false
                                 pending = null
-                                if (request != null) placeOrraCallOnAccount(context, request.first, request.second, account)
+                                if (request != null) placeOrraCallOnAccount(context, request.first, request.second, account, request.third)
                             }
                         ) { Text(label, color = if (darkMode) Color(0xFFC9C2FF) else MaterialTheme.colorScheme.primary) }
                     }
