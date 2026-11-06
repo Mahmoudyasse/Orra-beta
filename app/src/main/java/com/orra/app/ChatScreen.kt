@@ -501,6 +501,20 @@ fun ChatScreen() {
         }
     }
 
+    LaunchedEffect(OrraPendingChat.userId, client) {
+        val targetUser = OrraPendingChat.userId
+        if (signedIn && client != null && !targetUser.isNullOrBlank()) {
+            runCatching {
+                val conversationId = withContext(Dispatchers.IO) { client.createConversation(targetUser) }
+                conversations = withContext(Dispatchers.IO) { client.loadConversations() }
+                selected = conversations.firstOrNull { it.id == conversationId }
+                    ?: throw IllegalStateException("The ORRA conversation could not be opened.")
+                messages = withContext(Dispatchers.IO) { client.loadMessages(conversationId) }
+            }.onFailure { error = it.message ?: "Could not open the ORRA chat." }
+            OrraPendingChat.clear()
+        }
+    }
+
     DisposableEffect(client) {
         onDispose {
             recorder.stop()
