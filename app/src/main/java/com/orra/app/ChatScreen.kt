@@ -257,7 +257,7 @@ fun ChatScreen() {
         scope.launch {
             busy = true
             error = ""
-            try { task() } catch (e: Exception) { error = e.message ?: "Something went wrong." }
+            try { task() } catch (e: Exception) { android.util.Log.w("ORRA", "Background operation failed", e) }
             finally { busy = false }
         }
     }
@@ -395,7 +395,7 @@ fun ChatScreen() {
         if (granted && pending != null) runCatching {
             saveOrraContact(context, pending.first, pending.second)
             error = "Contact saved to your phone."
-        }.onFailure { error = "Could not save contact. Check Contacts permission." }
+        }.onFailure { android.util.Log.w("ORRA", "Contact save failed", it) }
         else if (!granted) error = "Contacts permission was denied."
         pendingSaveContact = null
     }
@@ -444,7 +444,7 @@ fun ChatScreen() {
                     token = nextAccess
                     refreshToken = nextRefresh
                 } catch (e: Exception) {
-                    error = e.message ?: "Session expired. Sign in again."
+                    android.util.Log.w("ORRA", "Session refresh failed", e)
                     break
                 }
             }
@@ -473,7 +473,7 @@ fun ChatScreen() {
                             }
                         }
                     }
-                } catch (e: Exception) { error = e.message ?: "Could not refresh chats." }
+                } catch (e: Exception) { android.util.Log.w("ORRA", "Chat refresh failed", e) }
                 delay(3500)
             }
         }
@@ -539,7 +539,7 @@ fun ChatScreen() {
                 phoneNumber = loaded.phoneNumber
                 avatarPreview = loaded.avatarUrl
                 coverPreview = loaded.coverUrl
-            }.onFailure { error = it.message ?: "Profile could not be loaded." }
+            }.onFailure { android.util.Log.w("ORRA", "Profile load failed", it) }
             runCatching {
                 val backupId = withContext(Dispatchers.IO) { client.ensureDailyCloudBackup() }
                 backupStatus = if (backupId != null) "Cloud chat backup is up to date." else "Cloud backup is not available yet."
@@ -556,7 +556,7 @@ fun ChatScreen() {
                 selected = conversations.firstOrNull { it.id == conversationId }
                     ?: throw IllegalStateException("The ORRA conversation could not be opened.")
                 messages = withContext(Dispatchers.IO) { client.loadMessages(conversationId) }
-            }.onFailure { error = it.message ?: "Could not open the ORRA chat." }
+            }.onFailure { android.util.Log.w("ORRA", "Chat open failed", it) }
             OrraPendingChat.clear()
         }
     }
@@ -652,7 +652,7 @@ fun ChatScreen() {
                             .appendQueryParameter("redirect_to", "com.orra.beta://auth-callback/")
                             .build()
                         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, authUrl)) }
-                            .onFailure { error = "Could not open Google sign-in." }
+                            .onFailure { android.util.Log.w("ORRA", "Google sign-in launch failed", it) }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Continue with Google") }
@@ -967,7 +967,7 @@ fun ChatScreen() {
                                                     setOnPreparedListener { it.start() }
                                                     prepareAsync()
                                                 }
-                                            }.onFailure { error = "Could not play this voice message." }
+                                            }.onFailure { android.util.Log.w("ORRA", "Voice playback failed", it) }
                                         }) { Icon(Icons.Default.Mic, contentDescription = "Play voice message") }
                                         Text("Voice message")
                                     }
@@ -979,7 +979,7 @@ fun ChatScreen() {
                                                 val intent = Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(message.mediaUrl), mime)
                                                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                                 runCatching { context.startActivity(intent) }
-                                                    .onFailure { error = "No compatible app could open this attachment." }
+                                                    .onFailure { android.util.Log.w("ORRA", "Attachment open failed", it) }
                                             }) { Text("Open attachment") }
                                         }
                                     }
@@ -989,7 +989,7 @@ fun ChatScreen() {
                                         TextButton(onClick = {
                                             val mapsUrl = message.body.substringAfterLast("\n")
                                             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(mapsUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                                                .onFailure { error = "Could not open map link." }
+                                                .onFailure { android.util.Log.w("ORRA", "Map launch failed", it) }
                                         }) { Text("Open in maps") }
                                         TextButton(onClick = { clipboard.setText(AnnotatedString(message.body)) }) { Text("Copy location details") }
                                     }
@@ -1059,7 +1059,7 @@ fun ChatScreen() {
                                 }
                             } catch (e: Exception) {
                                 messageText = body
-                                error = e.message ?: "Message could not be sent. Your text has been restored."
+                                android.util.Log.w("ORRA", "Message send failed", e)
                             } finally {
                                 busy = false
                             }
@@ -1262,7 +1262,7 @@ fun ChatScreen() {
                             val contact = selected!!.username to selected!!.peerPhone!!
                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
                                 runCatching { saveOrraContact(context, contact.first, contact.second); error = "Contact saved to your phone." }
-                                    .onFailure { error = "Could not save contact." }
+                                    .onFailure { android.util.Log.w("ORRA", "Contact save failed", it) }
                             } else {
                                 pendingSaveContact = contact
                                 contactsWritePermission.launch(Manifest.permission.WRITE_CONTACTS)
