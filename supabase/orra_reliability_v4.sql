@@ -79,6 +79,7 @@ grant execute on function public.orra_mark_conversation_read(uuid) to authentica
 revoke all on function public.handle_new_orra_user() from public, anon, authenticated;
 revoke all on function public.create_or_get_conversation(uuid) from public, anon;
 revoke all on function public.is_orra_conversation_member(uuid) from public, anon;
+grant execute on function public.is_orra_conversation_member(uuid) to authenticated;
 revoke all on function public.orra_create_message_receipts() from public, anon, authenticated;
 
 
