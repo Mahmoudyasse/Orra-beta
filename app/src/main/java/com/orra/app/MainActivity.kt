@@ -95,7 +95,6 @@ fun OrraApp() {
                 else if (selected == 2) DialerScreen()
                 else if (selected == 3) ContactsScreen()
                 else if (selected == 4) SettingsScreen()
-                }
             }
             Box(
                 modifier = Modifier
