@@ -276,3 +276,61 @@ with check (
 );
 
 grant execute on function public.orra_users_blocked(uuid, uuid) to authenticated;
+
+create table if not exists public.message_events (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid not null references public.messages(id) on delete cascade,
+  actor_id uuid not null references public.profiles(id) on delete cascade,
+  event_type text not null check (event_type in ('edited','deleted_for_everyone')),
+  created_at timestamptz not null default now()
+);
+alter table public.message_events enable row level security;
+drop policy if exists "Members read message event history" on public.message_events;
+create policy "Members read message event history" on public.message_events
+for select to authenticated
+using (exists (
+  select 1 from public.messages m
+  where m.id = message_id and public.is_orra_conversation_member(m.conversation_id)
+));
+grant select on public.message_events to authenticated;
+
+create or replace function public.orra_delete_message_for_everyone(target_message uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.messages m where m.id = target_message and m.sender_id = auth.uid()) then
+    raise exception 'Only the sender can delete this message for everyone';
+  end if;
+  update public.messages set body = 'This message was deleted', deleted_for_everyone = true
+  where id = target_message and sender_id = auth.uid();
+  insert into public.message_events(message_id, actor_id, event_type)
+  values (target_message, auth.uid(), 'deleted_for_everyone');
+end;
+$$;
+
+create or replace function public.orra_edit_message(target_message uuid, new_body text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if coalesce(length(trim(new_body)), 0) < 1 or length(new_body) > 4000 then
+    raise exception 'Message text must contain 1 to 4000 characters';
+  end if;
+  if not exists (select 1 from public.messages m where m.id = target_message
+      and m.sender_id = auth.uid() and not m.deleted_for_everyone) then
+    raise exception 'Only the sender can edit this message';
+  end if;
+  update public.messages set body = trim(new_body), edited_at = now()
+  where id = target_message and sender_id = auth.uid();
+  insert into public.message_events(message_id, actor_id, event_type)
+  values (target_message, auth.uid(), 'edited');
+end;
+$$;
+
+grant execute on function public.orra_delete_message_for_everyone(uuid) to authenticated;
+grant execute on function public.orra_edit_message(uuid, text) to authenticated;
