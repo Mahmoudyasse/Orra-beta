@@ -54,7 +54,7 @@ fun CallsScreen() {
             Column(Modifier.weight(1f)) {
                 Text("Calls", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "Numbers you called from ORRA",
+                    "Numbers opened from ORRA",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
@@ -78,7 +78,7 @@ fun CallsScreen() {
                     Icon(Icons.Default.History, contentDescription = null)
                     Text("No ORRA call activity yet", fontWeight = FontWeight.Medium)
                     Text(
-                        "Calls started from ORRA will appear here. This is a local app history, not your phone's full call log.",
+                        "Numbers opened from the ORRA keypad or contacts appear here. This is a local app history, not your phone's full call log.",
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -106,7 +106,7 @@ fun CallsScreen() {
                                 data = Uri.parse("tel:" + Uri.encode(entry.number))
                             })
                         }) {
-                            Icon(Icons.Default.Call, contentDescription = "Call ${entry.name}", tint = CallGreen)
+                            Icon(Icons.Default.Call, contentDescription = "Open dialer for ${entry.name}", tint = CallGreen)
                         }
                     }
                 }
