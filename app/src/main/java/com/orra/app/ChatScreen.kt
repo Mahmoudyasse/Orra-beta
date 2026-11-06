@@ -462,11 +462,15 @@ fun ChatScreen() {
                         }
                     } else {
                         val activeConversation = selected!!
-                        messages = withContext(Dispatchers.IO) { client.loadMessages(activeConversation.id) }
-                        runCatching {
-                            withContext(Dispatchers.IO) { client.markConversationDelivered(activeConversation.id) }
-                            delay(450)
-                            withContext(Dispatchers.IO) { client.markConversationRead(activeConversation.id) }
+                        if (activeConversation.isAi) {
+                            messages = withContext(Dispatchers.IO) { client.loadOrraAiMessages() }
+                        } else {
+                            messages = withContext(Dispatchers.IO) { client.loadMessages(activeConversation.id) }
+                            runCatching {
+                                withContext(Dispatchers.IO) { client.markConversationDelivered(activeConversation.id) }
+                                delay(450)
+                                withContext(Dispatchers.IO) { client.markConversationRead(activeConversation.id) }
+                            }
                         }
                     }
                 } catch (e: Exception) { error = e.message ?: "Could not refresh chats." }
@@ -791,6 +795,24 @@ fun ChatScreen() {
                 }
             }
             Text("Conversations", fontWeight = FontWeight.SemiBold)
+            Surface(Modifier.fillMaxWidth().clickable {
+                selected = OrraChatConversation("orra-ai", "ORRA AI", "Your personal AI assistant", false, 0, null, null, true)
+                messages = emptyList()
+                error = ""
+            }, shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center) {
+                        Text("AI", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        Text("ORRA AI", fontWeight = FontWeight.SemiBold)
+                        Text("Your personal AI assistant", maxLines = 1,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("AI", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                }
+            }
             if (conversations.isEmpty()) {
                 // Keep the conversation area clean when there are no chats yet.
             } else {
@@ -844,7 +866,8 @@ fun ChatScreen() {
                 Column(Modifier.weight(1f)) {
                     Text(selected!!.username, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(
-                        if (selected!!.isGroup) "Group • ${selected!!.memberCount} members"
+                        if (selected!!.isAi) "AI assistant • Ready"
+                        else if (selected!!.isGroup) "Group • ${selected!!.memberCount} members"
                         else when {
                             activePeerPresence?.dnd == true -> "Do not disturb"
                             activePeerPresence?.typing == true && activePeerPresence?.typingConversation == selected!!.id -> "Typing…"
@@ -854,7 +877,7 @@ fun ChatScreen() {
                         style = MaterialTheme.typography.labelSmall,
                         color = if (activePeerPresence?.dnd == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (!selected!!.isGroup) {
+                if (!selected!!.isGroup && !selected!!.isAi) {
                     IconButton(onClick = {
                         val number = selected!!.peerPhone
                         if (number.isNullOrBlank()) error = "This user has not added a phone number to their ORRA profile."
@@ -903,7 +926,7 @@ fun ChatScreen() {
                 IconButton(onClick = { chatSearchVisible = !chatSearchVisible; chatSearch = "" }) {
                     Icon(Icons.Default.Search, contentDescription = "Search in chat")
                 }
-                IconButton(onClick = { showChatOptions = true }) { Icon(Icons.Default.Settings, contentDescription = "Chat options") }
+                if (!selected!!.isAi) IconButton(onClick = { showChatOptions = true }) { Icon(Icons.Default.Settings, contentDescription = "Chat options") }
             }
             if (chatSearchVisible) {
                 OutlinedTextField(chatSearch, { chatSearch = it }, Modifier.fillMaxWidth(),
@@ -1001,20 +1024,22 @@ fun ChatScreen() {
             if (voiceStatus.isNotBlank()) Text(voiceStatus, style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                IconButton(onClick = { showAttachmentMenu = true }, enabled = !busy) {
-                    Icon(Icons.Default.AttachFile, contentDescription = "Attach media, document, location or contact")
-                }
-                IconButton(onClick = {
-                    if (recording) {
-                        recorder.stop()
-                        voiceStatus = "Finishing voice message…"
-                    } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
-                }, enabled = !busy) {
-                    Icon(Icons.Default.Mic, contentDescription = if (recording) "Stop recording" else "Record voice message",
-                        tint = if (recording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                if (!selected!!.isAi) {
+                    IconButton(onClick = { showAttachmentMenu = true }, enabled = !busy) {
+                        Icon(Icons.Default.AttachFile, contentDescription = "Attach media, document, location or contact")
+                    }
+                    IconButton(onClick = {
+                        if (recording) {
+                            recorder.stop()
+                            voiceStatus = "Finishing voice message…"
+                        } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                    }, enabled = !busy) {
+                        Icon(Icons.Default.Mic, contentDescription = if (recording) "Stop recording" else "Record voice message",
+                            tint = if (recording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                    }
                 }
                 OutlinedTextField(messageText, { messageText = it }, Modifier.weight(1f),
-                    placeholder = { Text("Message") }, maxLines = 4)
+                    placeholder = { Text(if (selected!!.isAi) "Message ORRA AI…" else "Message") }, maxLines = 4)
                 IconButton(enabled = messageText.isNotBlank() && !busy && selected != null && client != null, onClick = {
                     val body = messageText.trim()
                     val active = selected
@@ -1025,8 +1050,13 @@ fun ChatScreen() {
                             error = ""
                             messageText = ""
                             try {
-                                withContext(Dispatchers.IO) { api.sendMessage(active.id, body) }
-                                messages = withContext(Dispatchers.IO) { api.loadMessages(active.id) }
+                                if (active.isAi) {
+                                    withContext(Dispatchers.IO) { api.sendOrraAiMessage(body) }
+                                    messages = withContext(Dispatchers.IO) { api.loadOrraAiMessages() }
+                                } else {
+                                    withContext(Dispatchers.IO) { api.sendMessage(active.id, body) }
+                                    messages = withContext(Dispatchers.IO) { api.loadMessages(active.id) }
+                                }
                             } catch (e: Exception) {
                                 messageText = body
                                 error = e.message ?: "Message could not be sent. Your text has been restored."
