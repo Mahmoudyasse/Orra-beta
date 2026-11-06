@@ -51,6 +51,12 @@ begin
   insert into public.profiles(id, username)
   values (new.id, requested_name)
   on conflict (id) do nothing;
+
+  if not exists (select 1 from public.profiles where id = new.id) then
+    insert into public.profiles(id, username)
+    values (new.id, requested_name || '_' || substr(new.id::text, 1, 6))
+    on conflict (id) do nothing;
+  end if;
   return new;
 end;
 $$;
