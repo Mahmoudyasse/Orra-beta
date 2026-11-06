@@ -792,7 +792,7 @@ fun ChatScreen() {
             }
             Text("Conversations", fontWeight = FontWeight.SemiBold)
             if (conversations.isEmpty()) {
-                Text("No conversations yet. Search for a username or create a group.")
+                // Keep the conversation area clean when there are no chats yet.
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(conversations.filter { conversation ->
@@ -1039,7 +1039,6 @@ fun ChatScreen() {
             }
         }
         if (busy) Text("Syncing…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-        if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
     }
 
     if (showAttachmentMenu) {
