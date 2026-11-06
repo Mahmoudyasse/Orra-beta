@@ -166,7 +166,7 @@ fun OrraApp() {
             Box(Modifier.fillMaxSize().statusBarsPadding()) {
                 if (selected == 0) ChatScreen()
                 else if (selected == 1) CallsScreen()
-                else if (selected == 2) DialerScreen()
+                else if (selected == 2) DialerScreen { selected = 0 }
                 else if (selected == 3) ContactsScreen()
                 else if (selected == 4) SettingsScreen()
             }
