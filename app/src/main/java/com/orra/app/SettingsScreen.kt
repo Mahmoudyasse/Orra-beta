@@ -108,17 +108,6 @@ fun SettingsScreen() {
                         } }
                     }
                 }
-                Text("Quick themes", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("Liquid" to ("liquid" to "system"), "Midnight" to ("violet" to "dark"),
-                        "Ocean" to ("blue" to "dark"), "Aurora" to ("green" to "dark"),
-                        "Rose" to ("rose" to "system")).forEach { (label, preset) ->
-                        OutlinedButton(onClick = {
-                            OrraAppearance.setAccent(context, preset.first)
-                            OrraAppearance.setMode(context, preset.second)
-                        }, modifier = Modifier.weight(1f)) { Text(label, fontSize = 10.sp) }
-                    }
-                }
                 Text("iPhone Island Liquid styling uses subtle translucent surfaces and restrained neon accents.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
             }
