@@ -59,7 +59,7 @@ class OrraWebRtcEngine(
             val constraints = MediaConstraints()
             audioSource = factory?.createAudioSource(constraints)
             audioTrack = factory?.createAudioTrack("orra-audio-$callId", audioSource)
-            peer?.addTrack(audioTrack, listOf("orra-stream"))
+            audioTrack?.let { peer?.addTrack(it, listOf("orra-stream")) }
             if (videoEnabled) createCameraTrack()
             if (caller) createOffer()
             onStatus(if (caller) "Calling…" else "Connecting…")
@@ -112,16 +112,16 @@ class OrraWebRtcEngine(
         }
         override fun onIceCandidatesRemoved(candidates: Array<IceCandidate>) {}
         override fun onAddStream(stream: MediaStream) {
-            stream.videoTracks.firstOrNull()?.addSink(remoteRenderer)
+            stream.videoTracks.firstOrNull()?.let { track -> remoteRenderer?.let(track::addSink) }
         }
         override fun onRemoveStream(stream: MediaStream) {}
         override fun onDataChannel(channel: DataChannel) {}
         override fun onRenegotiationNeeded() {}
         override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) {
-            (receiver.track() as? VideoTrack)?.addSink(remoteRenderer)
+            (receiver.track() as? VideoTrack)?.let { track -> remoteRenderer?.let(track::addSink) }
         }
         override fun onTrack(transceiver: RtpTransceiver) {
-            (transceiver.receiver.track() as? VideoTrack)?.addSink(remoteRenderer)
+            (transceiver.receiver.track() as? VideoTrack)?.let { track -> remoteRenderer?.let(track::addSink) }
         }
     }
 
