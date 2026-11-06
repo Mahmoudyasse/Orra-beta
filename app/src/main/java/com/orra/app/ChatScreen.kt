@@ -545,7 +545,6 @@ fun ChatScreen() {
             }
             if (authMethod == "email") {
                 Text(if (isSignUp) "Create your account" else "Sign in")
-            if (backupStatus.isNotBlank()) Text(backupStatus, style = MaterialTheme.typography.labelSmall)
                 if (isSignUp) OutlinedTextField(requestedUsername, { requestedUsername = it }, Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true)
                 OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email") }, singleLine = true)
                 OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
@@ -653,6 +652,7 @@ fun ChatScreen() {
                 Column(Modifier.weight(1f)) {
                     Text("ORRA Chats", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Text("@$username", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (backupStatus.isNotBlank()) Text(backupStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 }
                 TextButton(onClick = {
                     dndEnabled = !dndEnabled
