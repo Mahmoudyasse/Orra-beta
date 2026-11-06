@@ -97,7 +97,15 @@ fun OrraInternetCallScreen() {
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         permissionGranted = grants[Manifest.permission.RECORD_AUDIO] == true &&
             (!video || grants[Manifest.permission.CAMERA] == true)
-        if (!permissionGranted) error = "Microphone and camera permission is required."
+        if (!permissionGranted) {
+            error = "Microphone and camera permission is required. The call was ended because media access was denied."
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    runCatching { OrraCallSignaling(context, userId, token).updateStatus(callId, "ended") }
+                }
+                if (OrraInternetCallState.callId == callId) OrraInternetCallState.clear()
+            }
+        }
     }
     val localRenderer = remember(callId) { SurfaceViewRenderer(context) }
     val remoteRenderer = remember(callId) { SurfaceViewRenderer(context) }
