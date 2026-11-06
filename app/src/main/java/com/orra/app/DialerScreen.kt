@@ -1,8 +1,7 @@
 package com.orra.app
 
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +19,8 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 
 private val keys = listOf(
     listOf("1" to "", "2" to "ABC", "3" to "DEF"),
@@ -42,16 +44,19 @@ private val keys = listOf(
     listOf("*" to "", "0" to "+", "#" to "")
 )
 
-private fun startCall(ctx: Context, number: String) {
-    if (number.isBlank()) return
-    recordOrraCall(ctx, number, number)
-    ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(number))))
-}
 
 @Composable
 fun DialerScreen() {
     val ctx = LocalContext.current
     var number by remember { mutableStateOf("") }
+    var pendingCall by remember { mutableStateOf("") }
+    val callPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val pending = pendingCall
+        pendingCall = ""
+        if (granted && pending.isNotBlank()) placeOrraCall(ctx, pending, pending)
+    }
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = 24.dp),
@@ -80,7 +85,14 @@ fun DialerScreen() {
                 Box(
                     Modifier.size(78.dp)
                         .neonPress(CallGreen, 39.dp, 0.6f) {
-                            startCall(ctx, number)
+                            if (number.isNotBlank()) {
+                                if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
+                                    placeOrraCall(ctx, number, number)
+                                } else {
+                                    pendingCall = number
+                                    callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+                                }
+                            }
                         }
                         .clip(CircleShape).background(CallGreen),
                     contentAlignment = Alignment.Center
