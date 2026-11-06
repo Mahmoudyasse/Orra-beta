@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         OrraAppearance.load(this)
         consumeAuthCallback(intent)
-        setContent { OrraTheme { if (OrraCallState.activeCall != null) InCallScreen() else OrraApp() } }
+        setContent { OrraTheme { if (OrraInternetCallState.callId != null) OrraInternetCallScreen() else if (OrraCallState.activeCall != null) InCallScreen() else OrraApp() } }
     }
 
     override fun onNewIntent(intent: Intent) {
