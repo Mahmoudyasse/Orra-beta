@@ -150,15 +150,6 @@ fun OrraApp() {
             }
         }
     }
-    if (showExitDialog) {
-        AlertDialog(
-            onDismissRequest = { showExitDialog = false },
-            title = { Text("Exit ORRA?") },
-            text = { Text("Press Exit to close the app, or Cancel to stay in ORRA.") },
-            confirmButton = { TextButton(onClick = { showExitDialog = false; activity?.finish() }) { Text("Exit") } },
-            dismissButton = { Button(onClick = { showExitDialog = false }) { Text("Stay in ORRA") } }
-        )
-    }
 }
 
 @Composable
