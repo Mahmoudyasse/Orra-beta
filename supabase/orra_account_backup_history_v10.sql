@@ -134,3 +134,58 @@ grant execute on function public.orra_create_chat_backup() to authenticated;
 
 update storage.buckets set file_size_limit=104857600,allowed_mime_types=null
 where id='orra-chat-media' and public=false;
+
+-- Restore a selected snapshot owned by the caller. This SECURITY DEFINER RPC checks ownership
+-- before restoring only conversations already present in that caller's backup.
+create or replace function public.orra_restore_chat_backup(target_backup uuid)
+returns integer
+language plpgsql
+security definer
+set search_path=public
+as $$
+declare
+  caller uuid := auth.uid();
+  saved jsonb;
+  restored_count integer := 0;
+begin
+  if caller is null then raise exception 'Authentication required'; end if;
+  select snapshot into saved from public.orra_chat_backups
+    where id=target_backup and owner_id=caller;
+  if not found then raise exception 'Backup not found for this account'; end if;
+
+  insert into public.conversations(id,title,is_group,created_by,created_at)
+  select (v->>'id')::uuid,coalesce(v->>'title',''),coalesce((v->>'is_group')::boolean,false),
+    nullif(v->>'created_by','')::uuid,coalesce((v->>'created_at')::timestamptz,now())
+  from jsonb_array_elements(coalesce(saved->'conversations','[]'::jsonb)) v
+  on conflict(id) do nothing;
+
+  insert into public.conversation_members(conversation_id,user_id,joined_at)
+  select (v->>'id')::uuid,caller,now()
+  from jsonb_array_elements(coalesce(saved->'conversations','[]'::jsonb)) v
+  on conflict(conversation_id,user_id) do nothing;
+
+  insert into public.messages(id,conversation_id,sender_id,body,created_at,message_type,media_url,edited_at,deleted_for_everyone,reply_to)
+  select (v->>'id')::uuid,(v->>'conversation_id')::uuid,(v->>'sender_id')::uuid,
+    coalesce(v->>'body',''),coalesce((v->>'created_at')::timestamptz,now()),
+    coalesce(v->>'message_type','text'),nullif(v->>'media_url',''),
+    nullif(v->>'edited_at','')::timestamptz,coalesce((v->>'deleted_for_everyone')::boolean,false),
+    nullif(v->>'reply_to','')::uuid
+  from jsonb_array_elements(coalesce(saved->'messages','[]'::jsonb)) v
+  where exists (
+    select 1 from jsonb_array_elements(coalesce(saved->'conversations','[]'::jsonb)) cv
+    where cv->>'id'=v->>'conversation_id'
+  )
+  on conflict(id) do nothing;
+  get diagnostics restored_count = row_count;
+
+  insert into public.message_events(id,message_id,actor_id,event_type,created_at,message_snapshot)
+  select (v->>'id')::uuid,(v->>'message_id')::uuid,(v->>'actor_id')::uuid,
+    v->>'event_type',coalesce((v->>'created_at')::timestamptz,now()),v->'message_snapshot'
+  from jsonb_array_elements(coalesce(saved->'message_events','[]'::jsonb)) v
+  on conflict(id) do nothing;
+
+  return restored_count;
+end;
+$$;
+revoke all on function public.orra_restore_chat_backup(uuid) from public,anon;
+grant execute on function public.orra_restore_chat_backup(uuid) to authenticated;
