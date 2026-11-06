@@ -2,6 +2,7 @@ package com.orra.app
 
 import android.content.Intent
 import android.telecom.Call
+import android.telecom.CallAudioState
 import android.telecom.InCallService
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -10,12 +11,32 @@ import androidx.compose.runtime.setValue
 object OrraCallState {
     var activeCall by mutableStateOf<Call?>(null)
     var status by mutableStateOf("Connecting")
+    var muted by mutableStateOf(false)
+    var speaker by mutableStateOf(false)
+    var service: OrraInCallService? = null
+
+    fun setMuted(value: Boolean) {
+        muted = value
+        service?.setMuted(value)
+    }
+
+    fun setSpeaker(value: Boolean) {
+        speaker = value
+        service?.setAudioRoute(if (value) CallAudioState.ROUTE_SPEAKER else CallAudioState.ROUTE_EARPIECE)
+    }
 }
 
 class OrraInCallService : InCallService() {
+    override fun onCreate() {
+        super.onCreate()
+        OrraCallState.service = this
+    }
+
     override fun onCallAdded(call: Call) {
         super.onCallAdded(call)
         OrraCallState.activeCall = call
+        OrraCallState.muted = false
+        OrraCallState.speaker = false
         updateStatus(call.state)
         call.registerCallback(object : Call.Callback() {
             override fun onStateChanged(call: Call, state: Int) {
@@ -34,7 +55,14 @@ class OrraInCallService : InCallService() {
         if (OrraCallState.activeCall === call) {
             OrraCallState.activeCall = null
             OrraCallState.status = "Call ended"
+            OrraCallState.muted = false
+            OrraCallState.speaker = false
         }
+    }
+
+    override fun onDestroy() {
+        if (OrraCallState.service === this) OrraCallState.service = null
+        super.onDestroy()
     }
 
     private fun updateStatus(state: Int) {
