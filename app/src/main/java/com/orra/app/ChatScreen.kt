@@ -703,6 +703,7 @@ fun ChatScreen() {
                                 OrraCallSignaling(context, userId, token).createCall(peerId, "audio")
                             }
                             OrraInternetCallState.begin(call, selected!!.username, true, userId, token)
+                            recordOrraInternetCall(context, selected!!.username, peerId, "Outgoing", "audio")
                         }
                     }) {
                         Icon(Icons.Default.Call, contentDescription = "ORRA internet voice call", tint = MaterialTheme.colorScheme.primary)
@@ -715,6 +716,7 @@ fun ChatScreen() {
                                 OrraCallSignaling(context, userId, token).createCall(peerId, "video")
                             }
                             OrraInternetCallState.begin(call, selected!!.username, true, userId, token)
+                            recordOrraInternetCall(context, selected!!.username, peerId, "Outgoing", "video")
                         }
                     }) {
                         Icon(Icons.Default.Videocam, contentDescription = "ORRA internet video call", tint = MaterialTheme.colorScheme.primary)
