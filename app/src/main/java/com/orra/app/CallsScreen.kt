@@ -43,8 +43,6 @@ import androidx.core.content.ContextCompat
 import java.text.DateFormat
 import androidx.compose.material3.Button
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Date
@@ -58,7 +56,6 @@ fun CallsScreen() {
     val prefs = remember { context.getSharedPreferences(SupabaseChatClient.PREFS, android.content.Context.MODE_PRIVATE) }
     val userId = prefs.getString("user_id", "").orEmpty()
     val accessToken = prefs.getString("token", "").orEmpty()
-    var incomingCalls by remember { mutableStateOf<List<OrraInternetCall>>(emptyList()) }
     var query by remember { mutableStateOf("") }
     var directionFilter by remember { mutableStateOf("All") }
     var showClearDialog by remember { mutableStateOf(false) }
@@ -68,15 +65,6 @@ fun CallsScreen() {
         entries.filter { entry ->
             (directionFilter == "All" || entry.direction.equals(directionFilter, ignoreCase = true)) &&
                 (query.isBlank() || entry.name.contains(query, ignoreCase = true) || entry.number.contains(query, ignoreCase = true))
-        }
-    }
-
-    LaunchedEffect(userId, accessToken) {
-        if (userId.isBlank() || accessToken.isBlank()) return@LaunchedEffect
-        val api = OrraCallSignaling(context, userId, accessToken)
-        while (isActive && OrraInternetCallState.callId == null) {
-            runCatching { incomingCalls = withContext(Dispatchers.IO) { api.incomingCalls() } }
-            delay(2500)
         }
     }
 
@@ -104,46 +92,6 @@ fun CallsScreen() {
         }
 
         if (callActionError.isNotBlank()) Text(callActionError, color = MaterialTheme.colorScheme.error)
-
-        if (incomingCalls.isNotEmpty()) {
-            Text("Incoming ORRA internet calls", style = MaterialTheme.typography.titleMedium)
-            incomingCalls.forEach { call ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(if (call.type == "video") "Incoming video call" else "Incoming voice call", fontWeight = FontWeight.SemiBold)
-                        Text("ORRA user", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Button(onClick = {
-                        scope.launch {
-                            val result = runCatching {
-                                withContext(Dispatchers.IO) {
-                                    OrraCallSignaling(context, userId, accessToken).updateStatus(call.id, "accepted")
-                                }
-                            }
-                            result.onSuccess {
-                                recordOrraInternetCall(context, "ORRA contact", call.callerId, "Incoming", call.type)
-                                OrraInternetCallState.begin(call, "ORRA contact", false, userId, accessToken)
-                                incomingCalls = incomingCalls.filterNot { it.id == call.id }
-                                callActionError = ""
-                            }.onFailure { callActionError = it.message ?: "Could not answer call." }
-                        }
-                    }) { Text("Answer") }
-                    OutlinedButton(onClick = {
-                        scope.launch {
-                            val result = runCatching {
-                                withContext(Dispatchers.IO) {
-                                    OrraCallSignaling(context, userId, accessToken).updateStatus(call.id, "rejected")
-                                }
-                            }
-                            result.onSuccess {
-                                incomingCalls = incomingCalls.filterNot { it.id == call.id }
-                                callActionError = ""
-                            }.onFailure { callActionError = it.message ?: "Could not decline call." }
-                        }
-                    }) { Text("Decline") }
-                }
-            }
-        }
 
         if (entries.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
