@@ -85,6 +85,7 @@ class OrraCallSignaling(
             if (code !in 200..299) throw IllegalStateException("TURN credentials unavailable ($code). Deploy the ORRA TURN function and configure its secrets.")
             val response = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
             val rows = response.optJSONArray("iceServers") ?: JSONArray()
+            if (!response.optBoolean("turnConfigured")) throw IllegalStateException("TURN is not configured yet; trying STUN only. Calls may fail on restrictive networks.")
             val result = mutableListOf<PeerConnection.IceServer>()
             for (i in 0 until rows.length()) {
                 val row = rows.optJSONObject(i) ?: continue
