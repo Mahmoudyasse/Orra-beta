@@ -208,7 +208,7 @@ fun SettingsScreen() {
                 }
                 Text("ORRA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Text("DEVELOPER  /  HAMOUDY YASSER", fontWeight = FontWeight.SemiBold, color = OrraAppearance.accentColor(), letterSpacing = 1.1.sp)
-                Text("Version 0.4.0-beta")
+                Text("Version 0.5.0-beta")
                 Text("Built with Kotlin, Jetpack Compose, Android Telecom and Supabase.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 Text("ORRA is an independent beta app and is not affiliated with WhatsApp or Apple.",
