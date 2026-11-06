@@ -210,6 +210,8 @@ fun ChatScreen() {
     var conversations by remember { mutableStateOf<List<OrraChatConversation>>(emptyList()) }
     var messages by remember { mutableStateOf<List<OrraChatMessage>>(emptyList()) }
     var demoMode by remember { mutableStateOf(false) }
+    var demoNotificationsGranted by remember { mutableStateOf(Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) }
+    val demoNotificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { demoNotificationsGranted = it }
     var selected by remember { mutableStateOf<OrraChatConversation?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
@@ -615,6 +617,7 @@ fun ChatScreen() {
                     Text("Demo Contact", fontWeight = FontWeight.Bold)
                 }
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(messages) { m -> Text((if (m.senderId == "demo-me") "You: " else "Demo Contact: ") + m.body, modifier = Modifier.fillMaxWidth().padding(8.dp)) } }
+                if (!demoNotificationsGranted) OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { if (Build.VERSION.SDK_INT >= 33) demoNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else demoNotificationsGranted = true }) { Text("Enable notification sound") }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(messageText, { messageText = it }, Modifier.weight(1f), placeholder = { Text("Message Demo Contact") })
                     IconButton(enabled = messageText.isNotBlank(), onClick = {
