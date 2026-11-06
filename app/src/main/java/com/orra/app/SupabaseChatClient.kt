@@ -477,6 +477,23 @@ class SupabaseChatClient(
         return result.trim().trim('"').takeIf { it.isNotBlank() }
     }
 
+    fun createCloudBackupNow(): String {
+        val result = request("/rest/v1/rpc/orra_create_chat_backup", "POST", JSONObject())
+        return result.trim().trim('"').takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("The server did not confirm the backup.")
+    }
+
+    fun restoreLatestCloudBackup(): Int {
+        val uid = currentUserId ?: throw IllegalStateException("Sign in again.")
+        val rows = JSONArray(request("/rest/v1/orra_chat_backups?select=id&owner_id=eq." +
+            encode(uid) + "&order=created_at.desc&limit=1"))
+        val backupId = rows.optJSONObject(0)?.optString("id").orEmpty()
+        if (backupId.isBlank()) throw IllegalStateException("No cloud backup exists for this account.")
+        val result = request("/rest/v1/rpc/orra_restore_chat_backup", "POST",
+            JSONObject().put("target_backup", backupId))
+        return result.trim().toIntOrNull() ?: 0
+    }
+
     fun searchUsersByPhone(rawPhone: String): OrraChatUser? {
         val phone = normalizePhone(rawPhone)
         val rows = JSONArray(request("/rest/v1/profiles?select=id,username,phone_number&phone_number=eq." + encode(phone) + "&limit=2"))
