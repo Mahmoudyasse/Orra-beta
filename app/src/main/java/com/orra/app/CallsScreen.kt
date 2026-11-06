@@ -183,5 +183,4 @@ fun CallsScreen() {
         )
     }
 }
-        OutlinedButton(onClick = { showVoiceStudio = true }) { Text("Voice Studio / REC") }
 
