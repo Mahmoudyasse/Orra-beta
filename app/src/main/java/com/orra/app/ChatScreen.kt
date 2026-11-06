@@ -355,7 +355,10 @@ fun ChatScreen() {
                             TextButton(onClick = {
                                 runTask {
                                     val id = withContext(Dispatchers.IO) { client!!.createConversation(user.id) }
-                                    selected = OrraChatConversation(id, user.username, "", false, 2, user.id)
+                                    val all = withContext(Dispatchers.IO) { client!!.loadConversations() }
+                                    conversations = all
+                                    selected = all.firstOrNull { it.id == id }
+                                        ?: OrraChatConversation(id, user.username, "", false, 2, user.id)
                                     users = emptyList(); messages = emptyList()
                                 }
                             }) { Text("Message") }
