@@ -12,7 +12,7 @@ import java.io.FileInputStream
 data class OrraChatUser(val id: String, val username: String)
 data class OrraChatConversation(
     val id: String, val username: String, val lastMessage: String,
-    val isGroup: Boolean = false, val memberCount: Int = 2, val peerUserId: String? = null
+    val isGroup: Boolean = false, val memberCount: Int = 2, val peerUserId: String? = null, val peerPhone: String? = null
 )
 data class OrraChatMessage(
     val id: String, val senderId: String, val body: String, val createdAt: String,
@@ -20,7 +20,7 @@ data class OrraChatMessage(
     val deletedForEveryone: Boolean = false
 )
 data class OrraChatProfile(
-    val username: String, val displayName: String, val bio: String,
+    val username: String, val displayName: String, val bio: String, val phoneNumber: String,
     val avatarUrl: String?, val coverUrl: String?
 )
 
@@ -137,7 +137,7 @@ class SupabaseChatClient(
             val otherId = (0 until members.length()).mapNotNull { members.optJSONObject(it)?.optString("user_id") }
                 .firstOrNull { it != uid }.orEmpty()
             val profiles = if (otherId.isNotBlank()) JSONArray(request(
-                "/rest/v1/profiles?select=username&id=eq." + encode(otherId) + "&limit=1"
+                "/rest/v1/profiles?select=username,phone_number&id=eq." + encode(otherId) + "&limit=1"
             )) else JSONArray()
             val username = if (isGroup) conversationRow?.optString("title").orEmpty().ifBlank { "Group" }
                 else profiles.optJSONObject(0)?.optString("username") ?: "User"
@@ -149,7 +149,7 @@ class SupabaseChatClient(
             val last = if (latestRow == null) "Start a conversation"
                 else if (latestRow.optBoolean("deleted_for_everyone")) "This message was deleted"
                 else latestRow.optString("body").ifBlank { "Attachment" }
-            result.add(OrraChatConversation(conversationId, username, last, isGroup, members.length(), otherId.takeIf { it.isNotBlank() }))
+            result.add(OrraChatConversation(conversationId, username, last, isGroup, members.length(), otherId.takeIf { it.isNotBlank() }, profiles.optJSONObject(0)?.optString("phone_number")?.takeIf { !it.isNullOrBlank() }))
         }
         return result
     }
@@ -206,10 +206,10 @@ class SupabaseChatClient(
             JSONObject().put("target_conversation", conversationId))
     }
 
-    fun updateProfile(displayName: String, bio: String, avatarUrl: String?, coverUrl: String?) {
+    fun updateProfile(displayName: String, bio: String, phoneNumber: String, avatarUrl: String?, coverUrl: String?) {
         val uid = currentUserId ?: throw IllegalStateException("Sign in again.")
         val body = JSONObject().put("display_name", displayName.trim())
-            .put("bio", bio.trim()).put("updated_at", java.time.Instant.now().toString())
+            .put("bio", bio.trim()).put("phone_number", phoneNumber.trim()).put("updated_at", java.time.Instant.now().toString())
         if (avatarUrl != null) body.put("avatar_url", avatarUrl)
         if (coverUrl != null) body.put("cover_url", coverUrl)
         request("/rest/v1/profiles?id=eq." + encode(uid), "PATCH", body)
@@ -217,11 +217,11 @@ class SupabaseChatClient(
 
     fun loadMyProfile(): OrraChatProfile {
         val uid = currentUserId ?: throw IllegalStateException("Sign in again.")
-        val rows = JSONArray(request("/rest/v1/profiles?select=username,display_name,bio,avatar_url,cover_url&id=eq." + encode(uid) + "&limit=1"))
+        val rows = JSONArray(request("/rest/v1/profiles?select=username,display_name,bio,phone_number,avatar_url,cover_url&id=eq." + encode(uid) + "&limit=1"))
         val row = rows.optJSONObject(0) ?: throw IllegalStateException("Profile not found.")
         return OrraChatProfile(row.optString("username"),
             row.optString("display_name").ifBlank { row.optString("username") },
-            row.optString("bio"), row.optString("avatar_url").takeIf { it.isNotBlank() }?.let { createSignedMediaUrl("orra-profiles", it) },
+            row.optString("bio"), row.optString("phone_number"), row.optString("avatar_url").takeIf { it.isNotBlank() }?.let { createSignedMediaUrl("orra-profiles", it) },
             row.optString("cover_url").takeIf { it.isNotBlank() }?.let { createSignedMediaUrl("orra-profiles", it) })
     }
 
