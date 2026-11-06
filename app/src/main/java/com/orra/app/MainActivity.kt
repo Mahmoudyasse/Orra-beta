@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { OrraTheme { OrraApp() } }
+        setContent { OrraTheme { if (OrraCallState.activeCall != null) InCallScreen() else OrraApp() } }
     }
 }
 
