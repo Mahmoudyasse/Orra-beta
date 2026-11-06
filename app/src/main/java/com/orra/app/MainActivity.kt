@@ -62,6 +62,8 @@ class MainActivity : ComponentActivity() {
         OrraAppearance.load(this)
         consumeAuthCallback(intent)
         setContent { OrraTheme { if (OrraCallState.activeCall != null) InCallScreen() else OrraApp() } }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -97,7 +99,6 @@ class MainActivity : ComponentActivity() {
                 }
             } catch (_: Exception) { }
         }.start()
-    }
     }
 }
 
