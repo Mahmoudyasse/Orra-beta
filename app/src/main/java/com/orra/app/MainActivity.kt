@@ -73,6 +73,7 @@ fun OrraApp() {
         Box(Modifier.fillMaxSize().padding(inner)) {
             Box(Modifier.fillMaxSize().statusBarsPadding()) {
                 if (selected == 2) DialerScreen()
+                else if (selected == 3) ContactsScreen()
                 else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(tabs[selected].label + " — coming soon")
                 }
