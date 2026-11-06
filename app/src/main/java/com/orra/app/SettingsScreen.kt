@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,10 +40,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen() {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val prefs = remember { context.getSharedPreferences(SupabaseChatClient.PREFS, android.content.Context.MODE_PRIVATE) }
+    val backupUserId = prefs.getString("user_id", "").orEmpty()
+    val backupToken = prefs.getString("token", "").orEmpty()
+    val backupClient = remember(backupUserId, backupToken) {
+        if (backupUserId.isNotBlank() && backupToken.isNotBlank()) SupabaseChatClient(context, SupabaseChatClient.DEFAULT_PROJECT_URL, SupabaseChatClient.DEFAULT_PUBLISHABLE_KEY, backupToken, backupUserId) else null
+    }
+    var backupStatus by remember { mutableStateOf("") }
+    var backupBusy by remember { mutableStateOf(false) }
     var isDefaultDialer by remember { mutableStateOf(isOrraDefaultDialer(context)) }
     val roleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         isDefaultDialer = isOrraDefaultDialer(context)
@@ -91,6 +104,36 @@ fun SettingsScreen() {
         }
 
         Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text("Account & chat backup", fontWeight = FontWeight.SemiBold)
+                Text("Your ORRA account and chats are stored in the connected server. A private chat snapshot is created daily when you open Chats. Media files remain in the private storage bucket.",
+                    style = MaterialTheme.typography.bodySmall)
+                if (backupStatus.isNotBlank()) Text(backupStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                Button(enabled = backupClient != null && !backupBusy, onClick = {
+                    scope.launch {
+                        backupBusy = true
+                        backupStatus = try {
+                            val id = withContext(Dispatchers.IO) { backupClient!!.createCloudBackupNow() }
+                            "Backup saved: " + id.take(8)
+                        } catch (e: Exception) { e.message ?: "Backup failed." }
+                        backupBusy = false
+                    }
+                }, modifier = Modifier.fillMaxWidth()) { Text(if (backupBusy) "Working…" else "Back up chats now") }
+                OutlinedButton(enabled = backupClient != null && !backupBusy, onClick = {
+                    scope.launch {
+                        backupBusy = true
+                        backupStatus = try {
+                            val count = withContext(Dispatchers.IO) { backupClient!!.restoreLatestCloudBackup() }
+                            "Restore complete. $count missing messages restored."
+                        } catch (e: Exception) { e.message ?: "Restore failed." }
+                        backupBusy = false
+                    }
+                }, modifier = Modifier.fillMaxWidth()) { Text("Restore latest backup") }
+                if (backupClient == null) Text("Sign in to manage cloud backups.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.Icon(Icons.Default.Lock, contentDescription = null)
@@ -125,7 +168,7 @@ fun SettingsScreen() {
                 }
                 Text("ORRA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Text("DEVELOPER  /  HAMOUDY YASSER", fontWeight = FontWeight.SemiBold, color = OrraAppearance.accentColor(), letterSpacing = 1.1.sp)
-                Text("Version 0.3.0-beta")
+                Text("Version 0.4.0-beta")
                 Text("Built with Kotlin, Jetpack Compose, Android Telecom and Supabase.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 Text("ORRA is an independent beta app and is not affiliated with WhatsApp or Apple.",
