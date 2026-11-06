@@ -13,8 +13,9 @@ Run each file in the Supabase SQL Editor, once, in this order:
 7. `supabase/orra_attachments_v6.sql`
 8. `supabase/orra_direct_messages_v7.sql`
 9. `supabase/orra_storage_upsert_v8.sql`
+10. `supabase/orra_account_backup_history_v10.sql`
 
-The reliability migration adds message delivery/read receipts and restricts call acceptance to the callee. The security migration removes anonymous execution from the app RPCs and adds missing foreign-key indexes. The attachment migration allows generic Android document-provider files while keeping the bucket private and capped at 20 MB. The direct-message migration ensures a DM is never accidentally opened as a group chat. The storage upsert migration grants safe owner-only UPDATE permission required by Supabase Storage upsert.
+The reliability migration adds message delivery/read receipts and restricts call acceptance to the callee. The security migration removes anonymous execution from the app RPCs and adds missing foreign-key indexes. The attachment migration allows generic Android document-provider files while keeping the bucket private and capped at 20 MB. The direct-message migration ensures a DM is never accidentally opened as a group chat. The storage upsert migration grants safe owner-only UPDATE permission required by Supabase Storage upsert. The v10 migration supports phone-only Auth profiles, verified phone directory entries, content snapshots for deleted messages, and private daily chat backups with restore.
 
 ## Enable email confirmation deep links
 
@@ -24,7 +25,21 @@ In Supabase Dashboard:
 - In the confirmation email template, keep the Supabase confirmation URL and ensure its redirect uses the supplied redirect target (`{{ .RedirectTo }}`) after verification.
 - Do not use `localhost` as the mobile redirect target.
 
-The app handles the access and refresh tokens returned in the callback fragment. If email confirmation is disabled, password sign-in returns a session immediately.
+The app handles the access and refresh tokens returned in the callback fragment. If email confirmation is disabled, password sign-in returns a session immediately. Daily chat snapshots are stored in the private `orra_chat_backups` table; users can create and restore backups from Settings. Deleted-message snapshots are available from each chat’s settings.
+
+## Enable real phone/SIM-number sign-in
+
+The app uses Supabase Phone OTP. The SIM is the user's SMS inbox; Android does not expose a reliable or privacy-safe way for ORRA to read the SIM's phone number automatically.
+
+In Supabase Dashboard:
+
+- Authentication → Sign In / Providers → enable Phone.
+- Configure an SMS provider (Twilio, Vonage, MessageBird, or another supported provider) with its real credentials.
+- Confirm SMS rate limits and OTP expiry.
+- Use E.164 numbers such as +2010XXXXXXXX.
+- For existing email accounts, the profile screen can link a phone number only after the phone-change OTP is verified.
+
+Until the provider is configured, the app can request an OTP but Supabase cannot deliver a real SMS.
 
 ## Enable Google sign-in
 
@@ -54,14 +69,14 @@ The Edge Function generates short-lived, user-scoped credentials. Without these 
 
 ## Current backend deployment state
 
-- SQL migrations 1–9 are applied to project `bmehobgcdjtnbwsdgjxg`.
+- SQL migrations 1–10 are applied to project `bmehobgcdjtnbwsdgjxg`.
 - `orra-turn-credentials` Edge Function is deployed with JWT verification enabled.
-- Chat and profile buckets are private; chat files are capped at 20 MB and profile images at 5 MB.
+- Chat and profile buckets are private; chat files are capped at 100 MB and profile images at 5 MB.
 - Database smoke tests for conversation creation, message receipts, message edit/delete, group creation, and call signaling/accept/end ran inside a rolled-back transaction.
 
 ## Push notifications
 
-Incoming ORRA calls currently poll Supabase while the Calls screen is open. Calls cannot reliably ring when the app is backgrounded or terminated until Firebase Cloud Messaging is configured.
+Incoming ORRA calls show an in-app prompt while ORRA is running. Calls and chat messages cannot reliably notify when the app is backgrounded or terminated until Firebase Cloud Messaging is configured.
 
 This repository does not contain `google-services.json` or Firebase service-account credentials. Those are project-specific and must come from the Firebase project registered for application ID `com.orra.beta`. Never commit a service-account private key or FCM server credential. Once the Firebase Android app file is added, the FCM receiver and server-side call notification function can be enabled.
 
