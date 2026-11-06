@@ -44,14 +44,21 @@ class SupabaseChatClient(
                 .putString("key", key.trim())
                 .apply()
         }
-        fun saveSession(context: Context, token: String, userId: String, username: String) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        fun saveSession(
+            context: Context, token: String, userId: String, username: String,
+            refreshToken: String? = null, expiresIn: Long = 3600
+        ) {
+            val edit = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putString("token", token).putString("user_id", userId)
-                .putString("username", username).apply()
+                .putString("username", username)
+                .putLong("expires_at", System.currentTimeMillis() + expiresIn.coerceAtLeast(60) * 1000L)
+            if (!refreshToken.isNullOrBlank()) edit.putString("refresh_token", refreshToken)
+            edit.apply()
         }
         fun clearSession(context: Context) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .remove("token").remove("user_id").remove("username").apply()
+                .remove("token").remove("refresh_token").remove("expires_at")
+                .remove("user_id").remove("username").apply()
         }
         fun saveProxy(context: Context, host: String, port: Int, type: String, enabled: Boolean) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
@@ -126,6 +133,14 @@ class SupabaseChatClient(
     fun signIn(email: String, password: String): JSONObject {
         val body = JSONObject().put("email", email.trim()).put("password", password)
         return JSONObject(request("/auth/v1/token?grant_type=password", "POST", body, false))
+    }
+
+    fun refreshSession(refreshToken: String): JSONObject {
+        require(refreshToken.isNotBlank()) { "Refresh token is missing. Sign in again." }
+        return JSONObject(request(
+            "/auth/v1/token?grant_type=refresh_token", "POST",
+            JSONObject().put("refresh_token", refreshToken), false
+        ))
     }
 
     fun searchUsers(query: String): List<OrraChatUser> {
