@@ -75,6 +75,7 @@ fun CallsScreen() {
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
             }
+            OutlinedButton(onClick = { showVoiceStudio = true }) { Text("Voice Studio / REC") }
             IconButton(onClick = { showClearDialog = true }, enabled = entries.isNotEmpty()) {
                 Icon(Icons.Default.Delete, contentDescription = "Clear call history")
             }
