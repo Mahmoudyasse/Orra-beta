@@ -74,7 +74,8 @@ fun OrraApp() {
     Scaffold(bottomBar = { NeonBar(selected) { selected = it } }) { inner ->
         Box(Modifier.fillMaxSize().padding(inner)) {
             Box(Modifier.fillMaxSize().statusBarsPadding()) {
-                if (selected == 1) CallsScreen()
+                if (selected == 0) ChatScreen()
+                else if (selected == 1) CallsScreen()
                 else if (selected == 2) DialerScreen()
                 else if (selected == 3) ContactsScreen()
                 else if (selected == 4) SettingsScreen()
