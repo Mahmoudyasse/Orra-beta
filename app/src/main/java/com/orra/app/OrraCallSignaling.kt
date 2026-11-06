@@ -115,7 +115,7 @@ class OrraCallSignaling(
 
     fun incomingCalls(): List<OrraInternetCall> {
         val rows = JSONArray(request(
-            "/rest/v1/orra_call_sessions?select=*&callee_id=eq.${enc(userId)}&status=eq.ringing&order=created_at.desc&limit=10"
+            "/rest/v1/orra_call_sessions?select=*&callee_id=eq.${enc(userId)}&status=eq.ringing&created_at=gte.${enc(java.time.Instant.now().minusSeconds(60).toString())}&order=created_at.desc&limit=10"
         ))
         return (0 until rows.length()).mapNotNull { rows.optJSONObject(it)?.toCall() }
     }
