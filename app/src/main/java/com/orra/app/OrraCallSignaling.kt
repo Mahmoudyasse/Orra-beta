@@ -3,6 +3,7 @@ package com.orra.app
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import org.webrtc.PeerConnection
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -69,6 +70,40 @@ class OrraCallSignaling(
         }
     }
 
+    fun loadIceServers(): List<PeerConnection.IceServer> {
+        val connection = URL("$baseUrl/functions/v1/orra-turn-credentials").openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 12000
+            connection.readTimeout = 12000
+            connection.setRequestProperty("apikey", apiKey)
+            connection.setRequestProperty("Authorization", "Bearer $accessToken")
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+            connection.outputStream.use { it.write("{}".toByteArray(Charsets.UTF_8)) }
+            val code = connection.responseCode
+            if (code !in 200..299) throw IllegalStateException("TURN credentials unavailable ($code). Deploy the ORRA TURN function and configure its secrets.")
+            val response = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+            val rows = response.optJSONArray("iceServers") ?: JSONArray()
+            val result = mutableListOf<PeerConnection.IceServer>()
+            for (i in 0 until rows.length()) {
+                val row = rows.optJSONObject(i) ?: continue
+                val urls = row.optJSONArray("urls") ?: JSONArray().put(row.optString("urls"))
+                val username = row.optString("username")
+                val credential = row.optString("credential")
+                for (j in 0 until urls.length()) {
+                    val uri = urls.optString(j)
+                    if (uri.isNotBlank()) {
+                        val builder = PeerConnection.IceServer.builder(uri)
+                        if (username.isNotBlank()) builder.setUsername(username)
+                        if (credential.isNotBlank()) builder.setPassword(credential)
+                        result.add(builder.createIceServer())
+                    }
+                }
+            }
+            return result
+        } finally { connection.disconnect() }
+    }
     fun createCall(peerId: String, type: String): OrraInternetCall {
         require(type == "audio" || type == "video")
         require(peerId.isNotBlank() && peerId != userId)
