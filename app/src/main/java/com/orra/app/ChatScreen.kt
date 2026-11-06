@@ -137,6 +137,7 @@ fun ChatScreen() {
     var projectUrl by remember { mutableStateOf(SupabaseChatClient.DEFAULT_PROJECT_URL) }
     var publishableKey by remember { mutableStateOf(SupabaseChatClient.DEFAULT_PUBLISHABLE_KEY) }
     var token by remember { mutableStateOf(prefs.getString("token", "").orEmpty()) }
+    var refreshToken by remember { mutableStateOf(prefs.getString("refresh_token", "").orEmpty()) }
     var userId by remember { mutableStateOf(prefs.getString("user_id", "").orEmpty()) }
     var username by remember { mutableStateOf(prefs.getString("username", "").orEmpty()) }
     LaunchedEffect(Unit) { SupabaseChatClient.saveConfig(context, projectUrl, publishableKey) }
@@ -375,6 +376,28 @@ fun ChatScreen() {
         } else voiceStatus = "Microphone permission denied"
     }
 
+    LaunchedEffect(token, refreshToken, client) {
+        if (signedIn && client != null && refreshToken.isNotBlank()) {
+            while (true) {
+                val expiresAt = prefs.getLong("expires_at", System.currentTimeMillis() + 3600000L)
+                val waitMillis = (expiresAt - System.currentTimeMillis() - 300000L).coerceAtLeast(30000L)
+                delay(waitMillis)
+                try {
+                    val refreshed = withContext(Dispatchers.IO) { client.refreshSession(refreshToken) }
+                    val nextAccess = refreshed.optString("access_token")
+                    val nextRefresh = refreshed.optString("refresh_token").ifBlank { refreshToken }
+                    if (nextAccess.isBlank()) throw IllegalStateException("Session refresh returned no access token.")
+                    val nextExpiry = refreshed.optLong("expires_in", 3600L)
+                    SupabaseChatClient.saveSession(context, nextAccess, userId, username, nextRefresh, nextExpiry)
+                    token = nextAccess
+                    refreshToken = nextRefresh
+                } catch (e: Exception) {
+                    error = e.message ?: "Session expired. Sign in again."
+                    break
+                }
+            }
+        }
+    }
     LaunchedEffect(token, selected?.id, client) {
         if (signedIn && client != null) {
             while (true) {
@@ -519,8 +542,10 @@ fun ChatScreen() {
                             val id = user.optString("id")
                             val name = user.optJSONObject("user_metadata")?.optString("username")
                                 ?.takeIf { !it.isNullOrBlank() } ?: email.substringBefore("@")
-                            SupabaseChatClient.saveSession(context, access, id, name)
-                            token = access; userId = id; username = name
+                            val nextRefresh = response.optString("refresh_token")
+                            val expiresIn = response.optLong("expires_in", 3600L)
+                            SupabaseChatClient.saveSession(context, access, id, name, nextRefresh, expiresIn)
+                            token = access; refreshToken = nextRefresh; userId = id; username = name
                         }
                     }
                 }, modifier = Modifier.fillMaxWidth()) {
