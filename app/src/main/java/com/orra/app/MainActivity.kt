@@ -122,13 +122,13 @@ fun OrraApp() {
 
     var selected by remember { mutableIntStateOf(2) }
     var tabHistory by remember { mutableStateOf<List<Int>>(emptyList()) }
-    var showExitDialog by remember { mutableStateOf(false) }
-    val activity = LocalContext.current as? Activity
     BackHandler(enabled = true) {
         if (tabHistory.isNotEmpty()) {
             selected = tabHistory.last()
             tabHistory = tabHistory.dropLast(1)
-        } else showExitDialog = true
+        } else if (selected != 2) {
+            selected = 2
+        }
     }
     Scaffold(bottomBar = { NeonBar(selected) { next ->
         if (next != selected) { tabHistory = tabHistory + selected; selected = next }
