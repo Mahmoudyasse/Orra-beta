@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -89,6 +92,12 @@ fun OrraInternetCallScreen() {
     var muted by remember(callId) { mutableStateOf(false) }
     var speaker by remember(callId) { mutableStateOf(true) }
     var cameraOn by remember(callId) { mutableStateOf(true) }
+    var showCallChat by remember(callId) { mutableStateOf(false) }
+    var callMessageText by remember(callId) { mutableStateOf("") }
+    var callMessages by remember(callId) { mutableStateOf<List<OrraChatMessage>>(emptyList()) }
+    var callConversationId by remember(callId) { mutableStateOf<String?>(null) }
+    var callChatError by remember(callId) { mutableStateOf("") }
+    val chatApi = remember(callId) { SupabaseChatClient(context, SupabaseChatClient.DEFAULT_PROJECT_URL, SupabaseChatClient.DEFAULT_PUBLISHABLE_KEY, token, userId) }
     var permissionGranted by remember(callId) {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
@@ -111,6 +120,19 @@ fun OrraInternetCallScreen() {
     val localRenderer = remember(callId) { SurfaceViewRenderer(context) }
     val remoteRenderer = remember(callId) { SurfaceViewRenderer(context) }
     var engine by remember(callId) { mutableStateOf<OrraWebRtcEngine?>(null) }
+
+    LaunchedEffect(callId) {
+        try {
+            val conversationId = withContext(Dispatchers.IO) { chatApi.createConversation(OrraInternetCallState.peerId) }
+            callConversationId = conversationId
+            while (isActive && OrraInternetCallState.callId == callId) {
+                callMessages = withContext(Dispatchers.IO) { chatApi.loadMessages(conversationId) }
+                delay(1800)
+            }
+        } catch (e: Exception) {
+            callChatError = e.message ?: "In-call chat is unavailable."
+        }
+    }
 
     LaunchedEffect(callId) {
         val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -209,6 +231,7 @@ fun OrraInternetCallScreen() {
             Spacer(Modifier.height(30.dp))
             Surface(Modifier.size(132.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {}
         }
+        OutlinedButton(onClick = { showCallChat = true }) { Text("Messages during call") }
         if (error.isNotBlank()) {
             Spacer(Modifier.height(12.dp))
             Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -246,5 +269,44 @@ fun OrraInternetCallScreen() {
                 if (OrraInternetCallState.callId == callId) OrraInternetCallState.clear()
             }
         }) { Text("End call") }
+    }
+    if (showCallChat) {
+        AlertDialog(
+            onDismissRequest = { showCallChat = false },
+            title = { Text("ORRA chat during call") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (callChatError.isNotBlank()) Text(callChatError, color = MaterialTheme.colorScheme.error)
+                    callMessages.takeLast(8).forEach { message ->
+                        Text((if (message.senderId == userId) "You: " else "${OrraInternetCallState.peerName}: ") + message.body,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    OutlinedTextField(
+                        value = callMessageText,
+                        onValueChange = { callMessageText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Message") },
+                        maxLines = 3
+                    )
+                }
+            },
+            confirmButton = {
+                Button(enabled = callMessageText.isNotBlank() && callConversationId != null,
+                    onClick = {
+                        val text = callMessageText.trim()
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { chatApi.sendMessage(callConversationId!!, text) }
+                                callMessageText = ""
+                                callMessages = withContext(Dispatchers.IO) { chatApi.loadMessages(callConversationId!!) }
+                                callChatError = ""
+                            } catch (e: Exception) {
+                                callChatError = e.message ?: "Message could not be sent."
+                            }
+                        }
+                    }) { Text("Send") }
+            },
+            dismissButton = { TextButton(onClick = { showCallChat = false }) { Text("Close") } }
+        )
     }
 }
