@@ -88,6 +88,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
 import java.io.File
+import java.text.DateFormat
+import java.util.Date
+import java.time.Instant
 
 private fun saveOrraContact(context: Context, name: String, number: String) {
     val ops = arrayListOf(
@@ -106,6 +109,11 @@ private fun saveOrraContact(context: Context, name: String, number: String) {
     )
     context.contentResolver.applyBatch(ContactsContract.AUTHORITY, ops)
 }
+
+private fun formatChatTimestamp(value: String): String =
+    runCatching {
+        DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date.from(Instant.parse(value)))
+    }.getOrElse { value.take(16).replace("T", " ") }
 
 private fun copyUriToCache(context: Context, uri: Uri): File {
     val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
@@ -715,7 +723,7 @@ fun ChatScreen() {
                                 }
                                 if (message.editedAt != null) Text("Edited", style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(message.createdAt.take(16).replace("T", " "),
+                                Text(formatChatTimestamp(message.createdAt),
                                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
