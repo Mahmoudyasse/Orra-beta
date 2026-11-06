@@ -8,6 +8,7 @@ import android.telecom.InCallService
 import android.telecom.VideoProfile
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 
 object OrraCallState {
@@ -16,6 +17,7 @@ object OrraCallState {
     var muted by mutableStateOf(false)
     var speaker by mutableStateOf(false)
     var videoState by mutableStateOf(VideoProfile.STATE_AUDIO_ONLY)
+    var connectedAtMillis by mutableLongStateOf(0L)
     var service: OrraInCallService? = null
 
     fun updateMute(value: Boolean) {
@@ -47,9 +49,12 @@ class OrraInCallService : InCallService() {
         OrraCallState.speaker = false
         updateStatus(call.state)
         OrraCallState.videoState = call.details.videoState
+        OrraCallState.connectedAtMillis = if (call.state == Call.STATE_ACTIVE) System.currentTimeMillis() else 0L
         call.registerCallback(object : Call.Callback() {
             override fun onStateChanged(call: Call, state: Int) {
                 OrraCallState.status = statusFor(state)
+                if (state == Call.STATE_ACTIVE && OrraCallState.connectedAtMillis == 0L)
+                    OrraCallState.connectedAtMillis = System.currentTimeMillis()
             }
             override fun onDetailsChanged(call: Call, details: Call.Details) {
                 OrraCallState.videoState = details.videoState
@@ -70,6 +75,7 @@ class OrraInCallService : InCallService() {
             OrraCallState.muted = false
             OrraCallState.speaker = false
             OrraCallState.videoState = VideoProfile.STATE_AUDIO_ONLY
+            OrraCallState.connectedAtMillis = 0L
         }
     }
 
