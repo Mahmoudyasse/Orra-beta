@@ -73,6 +73,8 @@ class MainActivity : ComponentActivity() {
     private fun consumeAuthCallback(intent: Intent?) {
         val uri = intent?.data ?: return
         if (uri.scheme != "com.orra.beta" || uri.host != "auth-callback") return
+        // Clear the one-shot callback intent before recreating the Activity; otherwise the same token link is consumed repeatedly.
+        setIntent(Intent(this, MainActivity::class.java))
         // Clear the callback URI before recreating the activity so it cannot be consumed repeatedly.
         intent.data = null
         setIntent(intent)
