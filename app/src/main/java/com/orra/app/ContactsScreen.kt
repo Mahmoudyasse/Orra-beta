@@ -186,6 +186,7 @@ fun ContactsScreen() {
                                 Icon(Icons.Default.Edit, contentDescription = "Edit ${contact.name}")
                             }
                             IconButton(onClick = {
+                                recordOrraCall(context, contact.name, contact.number)
                                 context.startActivity(Intent(Intent.ACTION_DIAL).apply {
                                     data = android.net.Uri.parse("tel:" + android.net.Uri.encode(contact.number))
                                 })
