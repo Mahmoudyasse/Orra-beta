@@ -17,6 +17,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,6 +68,9 @@ private fun placeOrraCallOnAccount(context: Context, name: String, number: Strin
 @Composable
 fun rememberOrraCallAction(): (String, String) -> Unit {
     val context = LocalContext.current
+    val darkMode = isSystemInDarkTheme()
+    val neon = Color(0xFF8B7DFF)
+    val simShape = RoundedCornerShape(16.dp)
     var pending by remember { mutableStateOf<Pair<String, String>?>(null) }
     var accounts by remember { mutableStateOf<List<PhoneAccountHandle>>(emptyList()) }
     var labels by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -119,16 +133,29 @@ fun rememberOrraCallAction(): (String, String) -> Unit {
         AlertDialog(
             onDismissRequest = { showPicker = false; pending = null },
             title = { Text("Choose SIM") },
+            containerColor = if (darkMode) Color(0xFF11121C) else MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             text = {
-                androidx.compose.foundation.layout.Column {
+                androidx.compose.foundation.layout.Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
                     labels.forEachIndexed { index, label ->
-                        TextButton(onClick = {
-                            val request = pending
-                            val account = accounts.getOrNull(index)
-                            showPicker = false
-                            pending = null
-                            if (request != null) placeOrraCallOnAccount(context, request.first, request.second, account)
-                        }) { Text(label) }
+                        TextButton(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (darkMode) Modifier
+                                    .shadow(8.dp, simShape, ambientColor = neon.copy(alpha = 0.16f), spotColor = neon.copy(alpha = 0.12f))
+                                    .clip(simShape)
+                                    .background(Color(0xFF191A29))
+                                    .border(1.dp, neon.copy(alpha = 0.42f), simShape)
+                                    .padding(vertical = 5.dp) else Modifier),
+                            onClick = {
+                                val request = pending
+                                val account = accounts.getOrNull(index)
+                                showPicker = false
+                                pending = null
+                                if (request != null) placeOrraCallOnAccount(context, request.first, request.second, account)
+                            }
+                        ) { Text(label, color = if (darkMode) Color(0xFFC9C2FF) else MaterialTheme.colorScheme.primary) }
                     }
                 }
             },
