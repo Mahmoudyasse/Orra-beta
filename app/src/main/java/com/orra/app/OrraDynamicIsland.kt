@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,8 +56,8 @@ fun OrraDynamicIsland() {
             .width(width)
             .height(height)
             .clip(shape)
-            .background(Color(0xFF08090D))
-            .border(1.dp, Color.White.copy(alpha = 0.12f), shape)
+            .background(Brush.linearGradient(listOf(Color(0xFF080A10), Color(0xFF15182A), Color(0xFF090B12))), shape)
+            .border(1.dp, OrraAppearance.accentColor().copy(alpha = 0.22f), shape)
             .clickable { expanded = !expanded }
             .animateContentSize(tween(220))
             .padding(horizontal = 15.dp, vertical = if (expanded) 12.dp else 7.dp),
@@ -67,7 +68,7 @@ fun OrraDynamicIsland() {
                 Modifier
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(Mint)
+                    .background(OrraAppearance.accentColor())
             )
             Spacer(Modifier.width(8.dp))
             Text(
@@ -80,7 +81,7 @@ fun OrraDynamicIsland() {
             Spacer(Modifier.weight(1f))
             Text(
                 text = if (expanded) "ACTIVE" else "• • •",
-                color = Mint,
+                color = OrraAppearance.accentColor(),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Medium
             )
