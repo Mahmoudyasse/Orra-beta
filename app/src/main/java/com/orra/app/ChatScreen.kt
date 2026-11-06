@@ -437,8 +437,12 @@ fun ChatScreen() {
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose { recorder.stop(); runCatching { player?.release() } }
+    DisposableEffect(client, dndEnabled) {
+        onDispose {
+            recorder.stop()
+            runCatching { player?.release() }
+            Thread { runCatching { client?.updatePresence(false, dndEnabled, false, null) } }.start()
+        }
     }
 
     val chatBackground = when (chatTheme) {
@@ -510,6 +514,11 @@ fun ChatScreen() {
                     Text("ORRA Chats", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Text("@$username", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                TextButton(onClick = {
+                    dndEnabled = !dndEnabled
+                    prefs.edit().putBoolean("orra_dnd_enabled", dndEnabled).apply()
+                    runTask { withContext(Dispatchers.IO) { client!!.updatePresence(true, dndEnabled, false, null) } }
+                }) { Text(if (dndEnabled) "DND ON" else "DND") }
                 IconButton(onClick = { showProfile = true }) {
                     if (!profile?.avatarUrl.isNullOrBlank()) AsyncImage(profile?.avatarUrl, null, Modifier.size(38.dp).clip(CircleShape))
                     else Icon(Icons.Default.Person, contentDescription = "Profile")
