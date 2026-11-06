@@ -310,7 +310,7 @@ begin
   if not exists (select 1 from public.messages m where m.id = target_message and m.sender_id = auth.uid()) then
     raise exception 'Only the sender can delete this message for everyone';
   end if;
-  update public.messages set body = 'This message was deleted', deleted_for_everyone = true
+  update public.messages set body = 'This message was deleted', deleted_for_everyone = true, media_url = null, message_type = 'text'
   where id = target_message and sender_id = auth.uid();
   insert into public.message_events(message_id, actor_id, event_type)
   values (target_message, auth.uid(), 'deleted_for_everyone');
