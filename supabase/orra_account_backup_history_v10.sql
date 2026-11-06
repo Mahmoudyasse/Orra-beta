@@ -220,3 +220,22 @@ revoke all on function public.orra_sync_verified_phone() from public,anon,authen
 -- Phone numbers are written only by the trusted Auth verification trigger.
 update public.profiles set phone_number=null where not phone_verified;
 revoke update(phone_number,phone_verified) on public.profiles from authenticated;
+
+-- Cache auth.uid() once per statement in exposed RLS policies.
+do $$
+declare p record; using_clause text; check_clause text;
+begin
+  for p in
+    select schemaname,tablename,policyname,qual,with_check
+    from pg_policies
+    where schemaname in ('public','storage')
+      and (coalesce(qual,'') like '%auth.uid()%' or coalesce(with_check,'') like '%auth.uid()%')
+  loop
+    using_clause := case when p.qual is not null
+      then ' using (' || replace(p.qual,'auth.uid()','(select auth.uid())') || ')' else '' end;
+    check_clause := case when p.with_check is not null
+      then ' with check (' || replace(p.with_check,'auth.uid()','(select auth.uid())') || ')' else '' end;
+    execute format('alter policy %I on %I.%I%s%s',
+      p.policyname,p.schemaname,p.tablename,using_clause,check_clause);
+  end loop;
+end $$;
