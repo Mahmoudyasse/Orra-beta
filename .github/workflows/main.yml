@@ -1,4 +1,7 @@
 name: Build APK
+concurrency:
+  group: orra-beta-build
+  cancel-in-progress: true
 on:
   push:
     branches: [main]
