@@ -2,6 +2,7 @@ package com.orra.app
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.media.AudioManager
 import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
@@ -119,6 +120,11 @@ fun OrraInternetCallScreen() {
 
     LaunchedEffect(callId, permissionGranted) {
         if (!permissionGranted) return@LaunchedEffect
+        runCatching {
+            val serviceIntent = Intent(context, OrraCallForegroundService::class.java)
+                .putExtra(OrraCallForegroundService.EXTRA_VIDEO, video)
+            ContextCompat.startForegroundService(context, serviceIntent)
+        }.onFailure { error = it.message ?: "Could not keep the call active in the background." }
         val api = OrraCallSignaling(context, userId, token)
         val rtc = OrraWebRtcEngine(context, api, callId, caller, video,
             onStatus = { status = it },
@@ -170,6 +176,7 @@ fun OrraInternetCallScreen() {
         onDispose {
             runCatching { engine?.release() }
             if (!video) { runCatching { localRenderer.release() }; runCatching { remoteRenderer.release() } }
+            context.stopService(Intent(context, OrraCallForegroundService::class.java))
             val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             audio.mode = AudioManager.MODE_NORMAL
             audio.isSpeakerphoneOn = false
