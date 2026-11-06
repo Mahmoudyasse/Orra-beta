@@ -220,3 +220,17 @@ drop policy if exists "ORRA owners delete chat media" on storage.objects;
 create policy "ORRA owners delete chat media" on storage.objects
 for delete to authenticated
 using (bucket_id = 'orra-chat-media' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create or replace function public.orra_delete_conversation_for_me(target_conversation uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.conversation_members
+  where conversation_id = target_conversation and user_id = auth.uid();
+end;
+$$;
+
+grant execute on function public.orra_delete_conversation_for_me(uuid) to authenticated;
