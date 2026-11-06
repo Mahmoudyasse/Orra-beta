@@ -9,8 +9,10 @@ Run each file in the Supabase SQL Editor, once, in this order:
 3. `supabase/orra_presence_v3.sql`
 4. `supabase/orra_internet_calls_v1.sql`
 5. `supabase/orra_reliability_v4.sql`
+6. `supabase/orra_security_v5.sql`
+7. `supabase/orra_attachments_v6.sql`
 
-The last migration adds message delivery/read receipts and restricts call acceptance to the callee. The app tolerates the receipt migration being absent, but delivery/read indicators remain at their fallback state until it is applied.
+The reliability migration adds message delivery/read receipts and restricts call acceptance to the callee. The security migration removes anonymous execution from the app RPCs and adds missing foreign-key indexes. The attachment migration allows generic Android document-provider files while keeping the bucket private and capped at 20 MB.
 
 ## Enable email confirmation deep links
 
@@ -33,7 +35,7 @@ The app's Google button starts Supabase OAuth in the browser. It does not grant 
 
 ## Configure TURN for reliable calls across networks
 
-The Android client always has a public STUN fallback. TURN is needed for restrictive NATs, carrier networks, and some Wi-Fi networks.
+The authenticated `orra-turn-credentials` Edge Function has been deployed to the linked Supabase project. The Android client calls it before WebRTC setup and always has a public STUN fallback. TURN is needed for restrictive NATs, carrier networks, and some Wi-Fi networks. The function currently returns STUN only until the two TURN secrets below are configured.
 
 1. Provision a TURN server/provider that supports the coturn REST shared-secret credential format.
 2. Configure the TURN server with `use-auth-secret`, `static-auth-secret` and a `realm`.
@@ -47,6 +49,13 @@ The Android client always has a public STUN fallback. TURN is needed for restric
    - `ORRA_TURN_SHARED_SECRET` — the same shared secret configured on coturn
 
 The Edge Function generates short-lived, user-scoped credentials. Without these secrets, it returns STUN only; calls may fail on restrictive networks.
+
+## Current backend deployment state
+
+- SQL migrations 1–7 are applied to project `bmehobgcdjtnbwsdgjxg`.
+- `orra-turn-credentials` Edge Function is deployed with JWT verification enabled.
+- Chat and profile buckets are private; chat files are capped at 20 MB and profile images at 5 MB.
+- Database smoke tests for conversation creation, message receipts, message edit/delete, group creation, and call signaling/accept/end ran inside a rolled-back transaction.
 
 ## Push notifications
 
