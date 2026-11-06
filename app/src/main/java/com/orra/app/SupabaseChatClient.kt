@@ -19,7 +19,7 @@ data class OrraChatConversation(
 data class OrraChatMessage(
     val id: String, val senderId: String, val body: String, val createdAt: String,
     val type: String = "text", val mediaUrl: String? = null, val editedAt: String? = null,
-    val deletedForEveryone: Boolean = false, val senderUsername: String = ""
+    val deletedForEveryone: Boolean = false, val senderUsername: String = "", val receiptStatus: String? = null
 )
 data class OrraUserPresence(val userId: String, val online: Boolean, val dnd: Boolean, val typing: Boolean, val typingConversation: String?, val lastSeen: String)
 data class OrraChatProfile(
@@ -206,20 +206,51 @@ class SupabaseChatClient(
             }
             senderNames[senderId] = resolvedName
         }
+        val receiptRows = runCatching {
+            val ids = (0 until rows.length()).mapNotNull { rows.optJSONObject(it)?.optString("id")?.takeIf { id -> id.isNotBlank() } }
+            if (ids.isEmpty()) JSONArray() else JSONArray(request(
+                "/rest/v1/message_receipts?select=message_id,delivered_at,read_at&message_id=in.(" +
+                    ids.joinToString(",") { encode(it) } + ")"
+            ))
+        }.getOrDefault(JSONArray())
+        val receiptsByMessage = mutableMapOf<String, MutableList<JSONObject>>()
+        for (i in 0 until receiptRows.length()) {
+            val receipt = receiptRows.optJSONObject(i) ?: continue
+            receiptsByMessage.getOrPut(receipt.optString("message_id")) { mutableListOf() }.add(receipt)
+        }
         return (0 until rows.length()).mapNotNull { i ->
             val row = rows.optJSONObject(i) ?: return@mapNotNull null
             if (row.optString("id") in hidden) return@mapNotNull null
             val deleted = row.optBoolean("deleted_for_everyone")
             val sender = row.optString("sender_id")
-            OrraChatMessage(row.optString("id"), sender,
+            val messageId = row.optString("id")
+            val recipients = receiptsByMessage[messageId].orEmpty()
+            val receiptStatus = if (sender != currentUserId) null else when {
+                recipients.isEmpty() -> "sent"
+                recipients.all { it.optString("read_at").isNotBlank() } -> "read"
+                recipients.all { it.optString("delivered_at").isNotBlank() } -> "delivered"
+                else -> "sent"
+            }
+            OrraChatMessage(messageId, sender,
                 if (deleted) "This message was deleted" else row.optString("body"),
                 row.optString("created_at"), row.optString("message_type", "text"),
                 row.optString("media_url").takeIf { it.isNotBlank() }?.let { createSignedMediaUrl("orra-chat-media", it) },
-                row.optString("edited_at").takeIf { it.isNotBlank() }, deleted, senderNames[sender].orEmpty())
+                row.optString("edited_at").takeIf { it.isNotBlank() }, deleted, senderNames[sender].orEmpty(), receiptStatus)
         }
     }
 
+    fun markConversationDelivered(conversationId: String) {
+        request("/rest/v1/rpc/orra_mark_conversation_delivered", "POST",
+            JSONObject().put("target_conversation", conversationId))
+    }
+
+    fun markConversationRead(conversationId: String) {
+        request("/rest/v1/rpc/orra_mark_conversation_read", "POST",
+            JSONObject().put("target_conversation", conversationId))
+    }
+
     fun sendMessage(conversationId: String, body: String) {
+        require(body.isNotBlank() && body.length <= 4000) { "Message must contain 1 to 4000 characters." }
         val uid = currentUserId ?: throw IllegalStateException("Sign in again to send messages.")
         request(
             "/rest/v1/messages",
