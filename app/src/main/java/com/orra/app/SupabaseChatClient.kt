@@ -209,7 +209,7 @@ class SupabaseChatClient(
             val otherId = (0 until members.length()).mapNotNull { members.optJSONObject(it)?.optString("user_id") }
                 .firstOrNull { it != uid }.orEmpty()
             val profiles = if (otherId.isNotBlank()) JSONArray(request(
-                "/rest/v1/profiles?select=username,phone_number&id=eq." + encode(otherId) + "&limit=1"
+                "/rest/v1/profiles?select=username,phone_number,phone_verified&id=eq." + encode(otherId) + "&limit=1"
             )) else JSONArray()
             val username = if (isGroup) conversationRow?.optString("title").orEmpty().ifBlank { "Group" }
                 else profiles.optJSONObject(0)?.optString("username") ?: "User"
@@ -221,7 +221,7 @@ class SupabaseChatClient(
             val last = if (latestRow == null) "Start a conversation"
                 else if (latestRow.optBoolean("deleted_for_everyone")) "This message was deleted"
                 else latestRow.optString("body").ifBlank { "Attachment" }
-            result.add(OrraChatConversation(conversationId, username, last, isGroup, members.length(), otherId.takeIf { it.isNotBlank() }, profiles.optJSONObject(0)?.optString("phone_number")?.takeIf { !it.isNullOrBlank() }))
+            result.add(OrraChatConversation(conversationId, username, last, isGroup, members.length(), otherId.takeIf { it.isNotBlank() }, profiles.optJSONObject(0)?.takeIf { it.optBoolean("phone_verified") }?.optString("phone_number")?.takeIf { !it.isNullOrBlank() }))
         }
         return result
     }
