@@ -538,6 +538,14 @@ fun ChatScreen() {
                     runTask { users = withContext(Dispatchers.IO) { client!!.searchUsers(search) } }
                 }) { Icon(Icons.Default.Search, contentDescription = "Search") }
             }
+            OutlinedTextField(conversationSearch, { conversationSearch = it }, Modifier.fillMaxWidth(),
+                singleLine = true, label = { Text("Search your conversations") })
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("all" to "All", "groups" to "Groups", "direct" to "Direct").forEach { (key, label) ->
+                    if (chatSection == key) Button(onClick = { chatSection = key }) { Text(label) }
+                    else OutlinedButton(onClick = { chatSection = key }) { Text(label) }
+                }
+            }
             if (users.isNotEmpty()) {
                 Text("People", fontWeight = FontWeight.SemiBold)
                 users.forEach { user ->
@@ -565,7 +573,12 @@ fun ChatScreen() {
                 Text("No conversations yet. Search for a username or create a group.")
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(conversations, key = { it.id }) { conversation ->
+                    items(conversations.filter { conversation ->
+                        (chatSection == "all" || (chatSection == "groups" && conversation.isGroup) ||
+                            (chatSection == "direct" && !conversation.isGroup)) &&
+                            (conversationSearch.isBlank() || conversation.username.contains(conversationSearch, ignoreCase = true) ||
+                                conversation.lastMessage.contains(conversationSearch, ignoreCase = true))
+                    }, key = { it.id }) { conversation ->
                         Surface(Modifier.fillMaxWidth().clickable {
                             selected = conversation
                             messages = emptyList()
