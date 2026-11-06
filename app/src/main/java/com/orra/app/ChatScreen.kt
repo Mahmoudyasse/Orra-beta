@@ -279,7 +279,7 @@ fun ChatScreen() {
         if (uri != null && active != null && client != null) runTask {
             val file = withContext(Dispatchers.IO) { copyUriToCache(context, uri) }
             try {
-                require(file.length() <= 20L * 1024L * 1024L) { "Files larger than 20 MB are not supported yet." }
+                require(file.length() <= 100L * 1024L * 1024L) { "Files larger than 100 MB are not supported yet." }
                 val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
                 val type = if (mime.startsWith("image/")) "image" else "file"
                 val path = withContext(Dispatchers.IO) {
