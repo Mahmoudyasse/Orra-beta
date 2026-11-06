@@ -621,9 +621,16 @@ fun ChatScreen() {
                 }
                 Column(Modifier.weight(1f)) {
                     Text(selected!!.username, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(if (selected!!.isGroup) "Group • ${selected!!.memberCount} members"
-                        else selected!!.peerPhone?.takeIf { it.isNotBlank() } ?: "ORRA conversation",
-                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (selected!!.isGroup) "Group • ${selected!!.memberCount} members"
+                        else when {
+                            activePeerPresence?.dnd == true -> "Do not disturb"
+                            activePeerPresence?.typing == true && activePeerPresence?.typingConversation == selected!!.id -> "Typing…"
+                            activePeerPresence?.online == true -> "Online"
+                            else -> "Offline • " + (selected!!.peerPhone?.takeIf { it.isNotBlank() } ?: "ORRA")
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (activePeerPresence?.dnd == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (!selected!!.isGroup) {
                     IconButton(onClick = {
