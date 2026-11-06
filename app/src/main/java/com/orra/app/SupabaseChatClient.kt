@@ -15,7 +15,8 @@ data class OrraChatUser(val id: String, val username: String)
 data class OrraBlockedUser(val id: String, val username: String)
 data class OrraChatConversation(
     val id: String, val username: String, val lastMessage: String,
-    val isGroup: Boolean = false, val memberCount: Int = 2, val peerUserId: String? = null, val peerPhone: String? = null
+    val isGroup: Boolean = false, val memberCount: Int = 2, val peerUserId: String? = null, val peerPhone: String? = null,
+    val isAi: Boolean = false
 )
 data class OrraChatMessage(
     val id: String, val senderId: String, val body: String, val createdAt: String,
@@ -96,7 +97,7 @@ class SupabaseChatClient(
         try {
             connection.requestMethod = method
             connection.connectTimeout = 15000
-            connection.readTimeout = 15000
+            connection.readTimeout = 60000
             connection.setRequestProperty("apikey", publishableKey)
             connection.setRequestProperty("Accept", "application/json")
             if (authenticated && !accessToken.isNullOrBlank()) {
@@ -302,6 +303,36 @@ class SupabaseChatClient(
                 row.optString("media_url").takeIf { it.isNotBlank() }?.let { createSignedMediaUrl("orra-chat-media", it) },
                 row.optString("edited_at").takeIf { it.isNotBlank() }, deleted, senderNames[sender].orEmpty(), receiptStatus)
         }
+    }
+
+    fun loadOrraAiMessages(): List<OrraChatMessage> {
+        val rows = JSONArray(request(
+            "/rest/v1/orra_ai_messages?select=id,role,content,created_at&order=created_at.asc&limit=100"
+        ))
+        return (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val role = row.optString("role")
+            OrraChatMessage(
+                row.optString("id"),
+                if (role == "user") currentUserId.orEmpty() else "orra-ai-assistant",
+                row.optString("content"),
+                row.optString("created_at"),
+                senderUsername = if (role == "assistant") "ORRA AI" else ""
+            )
+        }
+    }
+
+    fun sendOrraAiMessage(message: String): String {
+        require(message.isNotBlank() && message.length <= 8000) {
+            "Message must contain 1 to 8000 characters."
+        }
+        val response = JSONObject(request(
+            "/functions/v1/orra-ai-chat",
+            "POST",
+            JSONObject().put("message", message.trim())
+        ))
+        return response.optString("reply").takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("ORRA AI returned an empty reply.")
     }
 
     fun markConversationDelivered(conversationId: String) {
