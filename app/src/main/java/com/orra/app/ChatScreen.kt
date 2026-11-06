@@ -2,6 +2,7 @@ package com.orra.app
 
 import android.Manifest
 import android.content.ContentProviderOperation
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.provider.ContactsContract
 import android.content.Context
@@ -771,10 +772,26 @@ fun ChatScreen() {
                                         }) { Icon(Icons.Default.Mic, contentDescription = "Play voice message") }
                                         Text("Voice message")
                                     }
-                                    "file", "video" -> Text(if (message.type == "video") "Video attachment: ${message.body}" else "File: ${message.body}")
+                                    "file", "video" -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(if (message.type == "video") "Video attachment: ${message.body}" else "File: ${message.body}")
+                                        if (!message.mediaUrl.isNullOrBlank()) {
+                                            TextButton(onClick = {
+                                                val mime = if (message.type == "video") "video/*" else "*/*"
+                                                val intent = Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(message.mediaUrl), mime)
+                                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                runCatching { context.startActivity(intent) }
+                                                    .onFailure { error = "No compatible app could open this attachment." }
+                                            }) { Text("Open attachment") }
+                                        }
+                                    }
                                     "location" -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Text("Current location", fontWeight = FontWeight.SemiBold)
                                         Text(message.body, style = MaterialTheme.typography.bodySmall)
+                                        TextButton(onClick = {
+                                            val mapsUrl = message.body.substringAfterLast("\n")
+                                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(mapsUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                                                .onFailure { error = "Could not open map link." }
+                                        }) { Text("Open in maps") }
                                         TextButton(onClick = { clipboard.setText(AnnotatedString(message.body)) }) { Text("Copy location details") }
                                     }
                                     "contact" -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
