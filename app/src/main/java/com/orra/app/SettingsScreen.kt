@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun SettingsScreen() {
@@ -123,7 +124,7 @@ fun SettingsScreen() {
                     Text("  About ORRA", fontWeight = FontWeight.SemiBold)
                 }
                 Text("ORRA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Text("DEVELOPER  /  HAMOUDY YASSER", fontWeight = FontWeight.SemiBold, color = OrraAppearance.accentColor(), letterSpacing = androidx.compose.ui.unit.sp(1.1f))
+                Text("DEVELOPER  /  HAMOUDY YASSER", fontWeight = FontWeight.SemiBold, color = OrraAppearance.accentColor(), letterSpacing = 1.1.sp)
                 Text("Version 0.2.0-beta")
                 Text("Built with Kotlin, Jetpack Compose, Android Telecom and Supabase.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
