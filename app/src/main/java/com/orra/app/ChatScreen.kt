@@ -265,6 +265,63 @@ fun ChatScreen() {
             messages = withContext(Dispatchers.IO) { client.loadMessages(active.id) }
         }
     }
+    val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val active = selected
+        if (uri != null && active != null && client != null) runTask {
+            val file = withContext(Dispatchers.IO) { copyUriToCache(context, uri) }
+            try {
+                require(file.length() <= 25L * 1024L * 1024L) { "Files larger than 25 MB are not supported yet." }
+                val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+                val type = when {
+                    mime.startsWith("image/") -> "image"
+                    mime.startsWith("audio/") -> "audio"
+                    mime.startsWith("video/") -> "video"
+                    else -> "file"
+                }
+                val path = withContext(Dispatchers.IO) {
+                    client.uploadMedia("orra-chat-media", file,
+                        "$userId/\${active.id}/\${System.currentTimeMillis()}_\${file.name}", mime)
+                }
+                withContext(Dispatchers.IO) { client.sendAttachment(active.id, file.name, type, path) }
+                messages = withContext(Dispatchers.IO) { client.loadMessages(active.id) }
+            } finally { file.delete() }
+        }
+    }
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        val allowed = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (!allowed) error = "Location permission was denied."
+        else {
+            val manager = context.getSystemService(LocationManager::class.java)
+            val provider = runCatching {
+                when {
+                    manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
+                    manager.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
+                    else -> null
+                }
+            }.getOrNull()
+            if (provider == null) error = "Turn on Location services and try again."
+            else {
+                val cached = runCatching { manager.getLastKnownLocation(provider) }.getOrNull()
+                if (cached != null && System.currentTimeMillis() - cached.time < 120000L) shareLocation(cached)
+                else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    manager.getCurrentLocation(provider, null, context.mainExecutor) { location ->
+                        if (location != null) shareLocation(location) else error = "Could not get your current location."
+                    }
+                } else {
+                    try {
+                        manager.requestSingleUpdate(provider, object : LocationListener {
+                            override fun onLocationChanged(location: Location) = shareLocation(location)
+                            @Deprecated("Deprecated by Android")
+                            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+                            override fun onProviderEnabled(provider: String) {}
+                            override fun onProviderDisabled(provider: String) { error = "Location provider was disabled." }
+                        }, Looper.getMainLooper())
+                    } catch (_: SecurityException) { error = "Location permission is required." }
+                }
+            }
+        }
+    }
     val contactsWritePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val pending = pendingSaveContact
         if (granted && pending != null) runCatching {
