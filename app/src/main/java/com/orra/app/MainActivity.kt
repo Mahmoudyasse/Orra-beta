@@ -80,12 +80,18 @@ fun OrraApp() {
     if (splash) { Splash(); return }
 
     var selected by remember { mutableIntStateOf(2) }
+    var tabHistory by remember { mutableStateOf<List<Int>>(emptyList()) }
     var showExitDialog by remember { mutableStateOf(false) }
     val activity = LocalContext.current as? Activity
     BackHandler(enabled = true) {
-        if (selected != 2) selected = 2 else showExitDialog = true
+        if (tabHistory.isNotEmpty()) {
+            selected = tabHistory.last()
+            tabHistory = tabHistory.dropLast(1)
+        } else showExitDialog = true
     }
-    Scaffold(bottomBar = { NeonBar(selected) { selected = it } }) { inner ->
+    Scaffold(bottomBar = { NeonBar(selected) { next ->
+        if (next != selected) { tabHistory = tabHistory + selected; selected = next }
+    } }) { inner ->
         Box(Modifier.fillMaxSize().padding(inner)) {
             Box(Modifier.fillMaxSize().statusBarsPadding()) {
                 if (selected == 0) ChatScreen()
