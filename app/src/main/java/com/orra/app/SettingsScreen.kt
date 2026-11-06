@@ -43,6 +43,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -140,7 +142,43 @@ fun SettingsScreen() {
                     Text("  About ORRA", fontWeight = FontWeight.SemiBold)
                 }
                 Text("ORRA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Text("DEVELOPER  /  HAMOUDY YASSER", fontWeight = FontWeight.SemiBold, color = OrraAppearance.accentColor(), letterSpacing = 1.1.sp)
+                val developerAccent = OrraAppearance.accentColor()
+                Surface(
+                    modifier = Modifier.border(
+                        1.dp,
+                        developerAccent.copy(alpha = if (mode == "dark") 0.58f else 0.34f),
+                        RoundedCornerShape(50)
+                    ),
+                    shape = RoundedCornerShape(50),
+                    color = developerAccent.copy(alpha = if (mode == "dark") 0.11f else 0.07f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("●", color = developerAccent, style = MaterialTheme.typography.labelSmall.copy(
+                            shadow = Shadow(
+                                color = developerAccent.copy(alpha = if (mode == "dark") 0.72f else 0.30f),
+                                offset = Offset.Zero,
+                                blurRadius = 10f
+                            )
+                        ))
+                        Text(
+                            "DEVELOPER  /  HAMOUDY YASSER",
+                            fontWeight = FontWeight.SemiBold,
+                            color = developerAccent,
+                            letterSpacing = 1.1.sp,
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                shadow = Shadow(
+                                    color = developerAccent.copy(alpha = if (mode == "dark") 0.48f else 0.18f),
+                                    offset = Offset.Zero,
+                                    blurRadius = 12f
+                                )
+                            )
+                        )
+                    }
+                }
                 Text("Version 0.5.0-beta")
                 Text("Built with Kotlin, Jetpack Compose, Android Telecom and Supabase.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
