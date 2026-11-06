@@ -1,6 +1,11 @@
 package com.orra.app
 
 import android.os.Bundle
+import android.content.Intent
+import android.net.Uri
+import java.net.HttpURLConnection
+import java.net.URL
+import org.json.JSONObject
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -56,6 +61,42 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         OrraAppearance.load(this)
         setContent { OrraTheme { if (OrraCallState.activeCall != null) InCallScreen() else OrraApp() } }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeAuthCallback(intent)
+    }
+
+    private fun consumeAuthCallback(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme != "com.orra.beta" || uri.host != "auth-callback") return
+        val values = uri.fragment.orEmpty().split("&").mapNotNull { part ->
+            val split = part.indexOf("=")
+            if (split <= 0) null else Uri.decode(part.substring(0, split)) to Uri.decode(part.substring(split + 1))
+        }.toMap()
+        val access = values["access_token"].orEmpty()
+        if (access.isBlank()) return
+        Thread {
+            try {
+                val connection = URL(SupabaseChatClient.DEFAULT_PROJECT_URL + "/auth/v1/user").openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                connection.setRequestProperty("apikey", SupabaseChatClient.DEFAULT_PUBLISHABLE_KEY)
+                connection.setRequestProperty("Authorization", "Bearer " + access)
+                val body = if (connection.responseCode in 200..299) connection.inputStream.bufferedReader().use { it.readText() } else ""
+                connection.disconnect()
+                val user = JSONObject(body)
+                val id = user.optString("id")
+                if (id.isNotBlank()) {
+                    val email = user.optString("email")
+                    val name = user.optJSONObject("user_metadata")?.optString("username")?.takeIf { !it.isNullOrBlank() } ?: email.substringBefore("@")
+                    SupabaseChatClient.saveSession(this, access, id, name)
+                    runOnUiThread { recreate() }
+                }
+            } catch (_: Exception) { }
+        }.start()
+    }
     }
 }
 
