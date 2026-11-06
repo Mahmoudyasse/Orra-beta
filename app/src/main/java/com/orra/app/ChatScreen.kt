@@ -4,6 +4,9 @@ import android.Manifest
 import android.content.ContentProviderOperation
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.media.RingtoneManager
 import android.provider.ContactsContract
 import android.content.Context
 import android.location.Location
@@ -206,6 +209,9 @@ fun ChatScreen() {
     var selectedUsers by remember { mutableStateOf(setOf<String>()) }
     var conversations by remember { mutableStateOf<List<OrraChatConversation>>(emptyList()) }
     var messages by remember { mutableStateOf<List<OrraChatMessage>>(emptyList()) }
+    var demoMode by remember { mutableStateOf(false) }
+    var demoNotificationsGranted by remember { mutableStateOf(Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) }
+    val demoNotificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { demoNotificationsGranted = it }
     var selected by remember { mutableStateOf<OrraChatConversation?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
@@ -594,8 +600,43 @@ fun ChatScreen() {
             .padding(start = 16.dp, end = 16.dp, top = 58.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        if (!configured) {
-            Text("Connect ORRA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        if (demoMode || !configured) {
+            Text("ORRA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Surface(Modifier.fillMaxWidth().clickable { demoMode = true; selected = OrraChatConversation("demo-local", "Demo Contact", "Local demo chat", peerUserId = "demo-peer"); messages = emptyList() }, shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Person, null); Column(Modifier.weight(1f).padding(start = 12.dp)) { Text("Demo Contact", fontWeight = FontWeight.SemiBold); Text("Try sending a message without signing in", style = MaterialTheme.typography.bodySmall) }; Icon(Icons.Default.Send, null) }
+            }
+            if (demoMode && selected?.id == "demo-local") {
+                Text("Demo chat is active. Replies are simulated on this device.", style = MaterialTheme.typography.bodySmall)
+            } else Text("Connect your account for real conversations.")
+            if (!demoMode) {
+                Text("Connect ORRA to use real accounts and synchronized messaging.")
+            }
+            if (demoMode && selected?.id == "demo-local") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { selected = null; demoMode = false }) { Icon(Icons.Default.ArrowBack, "Back") }
+                    Text("Demo Contact", fontWeight = FontWeight.Bold)
+                }
+                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(messages) { m -> Text((if (m.senderId == "demo-me") "You: " else "Demo Contact: ") + m.body, modifier = Modifier.fillMaxWidth().padding(8.dp)) } }
+                if (!demoNotificationsGranted) OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { if (Build.VERSION.SDK_INT >= 33) demoNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else demoNotificationsGranted = true }) { Text("Enable notification sound") }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(messageText, { messageText = it }, Modifier.weight(1f), placeholder = { Text("Message Demo Contact") })
+                    IconButton(enabled = messageText.isNotBlank(), onClick = {
+                        val body = messageText.trim(); messageText = ""
+                        val sent = OrraChatMessage("demo-" + System.currentTimeMillis(), "demo-me", body, Instant.now().toString())
+                        messages = messages + sent
+                        scope.launch {
+                            delay(1000)
+                            val reply = OrraChatMessage("demo-" + System.currentTimeMillis(), "demo-peer", "وصلت رسالتك: " + body.take(60) + " ✅ دي رسالة رد تجريبية.", Instant.now().toString())
+                            messages = messages + reply
+                            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return@launch
+                            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                            if (Build.VERSION.SDK_INT >= 26 && manager.getNotificationChannel("orra-demo") == null) manager.createNotificationChannel(NotificationChannel("orra-demo", "ORRA demo messages", NotificationManager.IMPORTANCE_HIGH).apply { setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), null) })
+                            val builder = if (Build.VERSION.SDK_INT >= 26) android.app.Notification.Builder(context, "orra-demo") else android.app.Notification.Builder(context)
+                            manager.notify(991, builder.setSmallIcon(android.R.drawable.sym_action_chat).setContentTitle("ORRA Demo Contact").setContentText(reply.body).setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)).build())
+                        }
+                    }) { Icon(Icons.Default.Send, "Send") }
+                }
+            }
             Text("Connect your Supabase project to use real ORRA accounts and synchronized messaging.")
             OutlinedTextField(projectUrl, { projectUrl = it }, Modifier.fillMaxWidth(), label = { Text("Project URL") }, singleLine = true)
             OutlinedTextField(publishableKey, { publishableKey = it }, Modifier.fillMaxWidth(), label = { Text("Publishable key") }, singleLine = true)
@@ -1020,7 +1061,6 @@ fun ChatScreen() {
                     }
                 }
             }
-                color = MaterialTheme.colorScheme.primary)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (!selected!!.isAi) {
                     IconButton(onClick = { showAttachmentMenu = true }, enabled = !busy) {
@@ -1164,8 +1204,7 @@ fun ChatScreen() {
                         }) { Text("Confirm phone number") }
                         TextButton(onClick = { phoneOtpPending = false; phoneOtpCode = "" }) { Text("Cancel verification") }
                     }
-                        color = MaterialTheme.colorScheme.primary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { avatarPicker.launch("image/*") }) { Icon(Icons.Default.Person, null); Text(" Photo") }
                         OutlinedButton(onClick = { coverPicker.launch("image/*") }) { Icon(Icons.Default.Photo, null); Text(" Cover") }
                     }
