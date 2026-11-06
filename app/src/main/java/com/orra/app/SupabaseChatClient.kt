@@ -314,8 +314,12 @@ class SupabaseChatClient(
             for (i in 0 until rows.length()) {
                 val row = rows.optJSONObject(i) ?: continue
                 val id = row.optString("user_id")
-                put(id, OrraUserPresence(id, row.optBoolean("is_online"), row.optBoolean("is_dnd"),
-                    row.optBoolean("is_typing"), row.optString("typing_conversation").takeIf { it.isNotBlank() }, row.optString("last_seen")))
+                val lastSeen = row.optString("last_seen")
+                val fresh = runCatching {
+                    java.time.Instant.parse(lastSeen).isAfter(java.time.Instant.now().minusSeconds(45))
+                }.getOrDefault(false)
+                put(id, OrraUserPresence(id, row.optBoolean("is_online") && fresh, row.optBoolean("is_dnd"),
+                    row.optBoolean("is_typing") && fresh, row.optString("typing_conversation").takeIf { it.isNotBlank() }, lastSeen))
             }
         }
     }
