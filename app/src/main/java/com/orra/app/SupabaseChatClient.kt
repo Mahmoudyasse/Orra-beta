@@ -5,6 +5,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.Proxy
+import java.net.InetSocketAddress
 import java.net.URLEncoder
 import java.io.File
 import java.io.FileInputStream
@@ -49,6 +51,14 @@ class SupabaseChatClient(
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .remove("token").remove("user_id").remove("username").apply()
         }
+        fun saveProxy(context: Context, host: String, port: Int, type: String, enabled: Boolean) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString("proxy_host", host.trim())
+                .putInt("proxy_port", port)
+                .putString("proxy_type", type)
+                .putBoolean("proxy_enabled", enabled)
+                .apply()
+        }
     }
 
     private val signedUrlCache = mutableMapOf<String, Pair<String, Long>>()
@@ -56,8 +66,19 @@ class SupabaseChatClient(
 
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
+    private fun openHttp(url: URL): HttpURLConnection {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val enabled = prefs.getBoolean("proxy_enabled", false)
+        val host = prefs.getString("proxy_host", "").orEmpty().trim()
+        val port = prefs.getInt("proxy_port", 0)
+        if (!enabled || host.isBlank() || port !in 1..65535) return url.openConnection() as HttpURLConnection
+        val kind = if (prefs.getString("proxy_type", "http") == "socks") Proxy.Type.SOCKS else Proxy.Type.HTTP
+        val proxy = Proxy(kind, InetSocketAddress(host, port))
+        return url.openConnection(proxy) as HttpURLConnection
+    }
+
     private fun request(path: String, method: String = "GET", body: JSONObject? = null, authenticated: Boolean = true): String {
-        val connection = (URL(projectUrl.trimEnd('/') + path).openConnection() as HttpURLConnection)
+        val connection = openHttp(URL(projectUrl.trimEnd('/') + path))
         try {
             connection.requestMethod = method
             connection.connectTimeout = 15000
@@ -261,8 +282,7 @@ class SupabaseChatClient(
             .put("is_typing", typing)
             .put("typing_conversation", conversationId ?: JSONObject.NULL)
             .put("last_seen", java.time.Instant.now().toString())
-        val connection = URL(projectUrl.trimEnd('/') + "/rest/v1/user_presence?on_conflict=user_id")
-            .openConnection() as HttpURLConnection
+        val connection = openHttp(URL(projectUrl.trimEnd('/') + "/rest/v1/user_presence?on_conflict=user_id"))
         try {
             connection.requestMethod = "POST"
             connection.doOutput = true
@@ -300,7 +320,7 @@ class SupabaseChatClient(
         val body = JSONObject().put("conversation_id", conversationId).put("user_id", currentUserId)
             .put("muted_until", if (muted) java.time.Instant.now().plusSeconds(315360000).toString() else JSONObject.NULL)
         val url = URL(projectUrl.trimEnd('/') + "/rest/v1/conversation_settings?on_conflict=conversation_id,user_id")
-        val connection = url.openConnection() as HttpURLConnection
+        val connection = openHttp(url)
         try {
             connection.requestMethod = "POST"; connection.doOutput = true
             connection.setRequestProperty("apikey", publishableKey)
