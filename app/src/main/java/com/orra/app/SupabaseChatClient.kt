@@ -117,7 +117,14 @@ class SupabaseChatClient(
             val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             if (code !in 200..299) {
                 val detail = runCatching { JSONObject(response).optString("message").ifBlank { response } }.getOrDefault(response)
-                throw IllegalStateException("Server error $code: " + detail.take(220))
+                val safeMessage = when (code) {
+                    400 -> "Could not complete that request. Check the information and try again."
+                    401, 403 -> "Your session or permissions need attention. Sign in again and retry."
+                    404 -> "This feature is not available on the server yet."
+                    else -> "Could not connect to ORRA right now. Please try again."
+                }
+                android.util.Log.w("ORRA", "Request failed (HTTP $code): " + detail.take(300))
+                throw IllegalStateException(safeMessage)
             }
             return response
         } finally {
