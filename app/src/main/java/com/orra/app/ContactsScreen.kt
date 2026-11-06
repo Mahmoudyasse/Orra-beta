@@ -84,14 +84,7 @@ fun ContactsScreen() {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     var showFavorites by remember { mutableStateOf(false) }
-    var pendingCall by remember { mutableStateOf<Pair<String, String>?>(null) }
-    val callPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        val pending = pendingCall
-        pendingCall = null
-        if (granted && pending != null) placeOrraCall(context, pending.first, pending.second)
-    }
+    val startCall = rememberOrraCallAction()
     var favoriteNumbers by remember {
         mutableStateOf(
             context.getSharedPreferences("orra_contacts", Context.MODE_PRIVATE)
@@ -253,12 +246,7 @@ fun ContactsScreen() {
                                 Icon(Icons.Default.Edit, contentDescription = "Edit ${contact.name}")
                             }
                             IconButton(onClick = {
-                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
-                                    placeOrraCall(context, contact.name, contact.number)
-                                } else {
-                                    pendingCall = contact.name to contact.number
-                                    callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
-                                }
+                                startCall(contact.name, contact.number)
                             }) {
                                 Icon(Icons.Default.Call, contentDescription = "Call ${contact.name}", tint = CallGreen)
                             }
