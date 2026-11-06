@@ -121,6 +121,7 @@ fun CallsScreen() {
                                 }
                             }
                             result.onSuccess {
+                                recordOrraInternetCall(context, "ORRA contact", call.callerId, "Incoming", call.type)
                                 OrraInternetCallState.begin(call, "ORRA contact", false, userId, accessToken)
                                 incomingCalls = incomingCalls.filterNot { it.id == call.id }
                                 callActionError = ""
@@ -195,7 +196,7 @@ fun CallsScreen() {
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(entry.name, fontWeight = FontWeight.Medium)
-                            Text(entry.number, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                            Text(if (entry.isInternet) "ORRA • ${if (entry.callType == "video") "Video" else "Voice"}" else entry.number, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                             Text(entry.direction, style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary)
                             Text(
@@ -206,9 +207,21 @@ fun CallsScreen() {
                             )
                         }
                         IconButton(onClick = {
-                            startCall(entry.name, entry.number)
+                            if (entry.isInternet && !entry.peerId.isNullOrBlank() && userId.isNotBlank() && accessToken.isNotBlank()) {
+                                scope.launch {
+                                    val result = runCatching {
+                                        withContext(Dispatchers.IO) {
+                                            OrraCallSignaling(context, userId, accessToken).createCall(entry.peerId!!, entry.callType)
+                                        }
+                                    }
+                                    result.onSuccess { call ->
+                                        OrraInternetCallState.begin(call, entry.name, true, userId, accessToken)
+                                        recordOrraInternetCall(context, entry.name, entry.peerId!!, "Outgoing", entry.callType)
+                                    }.onFailure { callActionError = it.message ?: "Could not start ORRA call." }
+                                }
+                            } else if (!entry.isInternet) startCall(entry.name, entry.number)
                         }) {
-                            Icon(Icons.Default.Call, contentDescription = "Open dialer for ${entry.name}", tint = CallGreen)
+                            Icon(Icons.Default.Call, contentDescription = "Call ${entry.name}", tint = CallGreen)
                         }
                     }
                 }
