@@ -148,12 +148,6 @@ class SupabaseChatClient(
         return JSONObject(request("/auth/v1/verify", "POST", body, false))
     }
 
-    fun saveVerifiedPhone(phone: String) {
-        val uid = currentUserId ?: throw IllegalStateException("Sign in again.")
-        request("/rest/v1/profiles?id=eq." + encode(uid), "PATCH",
-            JSONObject().put("phone_number", normalizePhone(phone)).put("updated_at", java.time.Instant.now().toString()))
-    }
-
     private fun normalizePhone(raw: String): String {
         val value = raw.trim().replace(Regex("[^0-9+]"), "")
         require(value.isNotBlank()) { "Enter a phone number." }
@@ -496,7 +490,7 @@ class SupabaseChatClient(
 
     fun searchUsersByPhone(rawPhone: String): OrraChatUser? {
         val phone = normalizePhone(rawPhone)
-        val rows = JSONArray(request("/rest/v1/profiles?select=id,username,phone_number&phone_number=eq." + encode(phone) + "&limit=2"))
+        val rows = JSONArray(request("/rest/v1/profiles?select=id,username,phone_number&phone_number=eq." + encode(phone) + "&phone_verified=is.true&limit=2"))
         val row = (0 until rows.length()).mapNotNull { rows.optJSONObject(it) }
             .firstOrNull { it.optString("id") != currentUserId } ?: return null
         return OrraChatUser(row.optString("id"), row.optString("username"))
