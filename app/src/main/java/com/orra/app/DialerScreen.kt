@@ -1,12 +1,8 @@
 package com.orra.app
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,7 +34,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 
 private val keys = listOf(
     listOf("1" to "", "2" to "ABC", "3" to "DEF"),
@@ -50,16 +45,13 @@ private val keys = listOf(
 private fun startCall(ctx: Context, number: String) {
     if (number.isBlank()) return
     recordOrraCall(ctx, number, number)
-    ctx.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(number))))
+    ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(number))))
 }
 
 @Composable
 fun DialerScreen() {
     val ctx = LocalContext.current
     var number by remember { mutableStateOf("") }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startCall(ctx, number)
-    }
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = 24.dp),
@@ -88,9 +80,7 @@ fun DialerScreen() {
                 Box(
                     Modifier.size(78.dp)
                         .neonPress(CallGreen, 39.dp, 0.6f) {
-                            val ok = ContextCompat.checkSelfPermission(ctx, Manifest.permission.CALL_PHONE) ==
-                                PackageManager.PERMISSION_GRANTED
-                            if (ok) startCall(ctx, number) else launcher.launch(Manifest.permission.CALL_PHONE)
+                            startCall(ctx, number)
                         }
                         .clip(CircleShape).background(CallGreen),
                     contentAlignment = Alignment.Center
