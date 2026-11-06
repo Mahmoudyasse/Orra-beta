@@ -55,6 +55,8 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -93,6 +95,36 @@ import java.io.File
 import java.text.DateFormat
 import java.util.Date
 import java.time.Instant
+
+
+private data class OrraPhoneCountry(val name: String, val code: String)
+private val orraPhoneCountries = listOf(
+    OrraPhoneCountry("Egypt", "+20"), OrraPhoneCountry("Saudi Arabia", "+966"),
+    OrraPhoneCountry("United Arab Emirates", "+971"), OrraPhoneCountry("Kuwait", "+965"),
+    OrraPhoneCountry("Qatar", "+974"), OrraPhoneCountry("Bahrain", "+973"),
+    OrraPhoneCountry("Oman", "+968"), OrraPhoneCountry("Jordan", "+962"),
+    OrraPhoneCountry("Lebanon", "+961"), OrraPhoneCountry("Iraq", "+964"),
+    OrraPhoneCountry("Palestine", "+970"), OrraPhoneCountry("Morocco", "+212"),
+    OrraPhoneCountry("Algeria", "+213"), OrraPhoneCountry("Tunisia", "+216"),
+    OrraPhoneCountry("Libya", "+218"), OrraPhoneCountry("Sudan", "+249"),
+    OrraPhoneCountry("United States", "+1"), OrraPhoneCountry("Canada", "+1"),
+    OrraPhoneCountry("United Kingdom", "+44"), OrraPhoneCountry("Ireland", "+353"),
+    OrraPhoneCountry("France", "+33"), OrraPhoneCountry("Germany", "+49"),
+    OrraPhoneCountry("Italy", "+39"), OrraPhoneCountry("Spain", "+34"),
+    OrraPhoneCountry("Netherlands", "+31"), OrraPhoneCountry("Belgium", "+32"),
+    OrraPhoneCountry("Switzerland", "+41"), OrraPhoneCountry("Austria", "+43"),
+    OrraPhoneCountry("Sweden", "+46"), OrraPhoneCountry("Norway", "+47"),
+    OrraPhoneCountry("Denmark", "+45"), OrraPhoneCountry("Turkey", "+90"),
+    OrraPhoneCountry("Pakistan", "+92"), OrraPhoneCountry("India", "+91"),
+    OrraPhoneCountry("Bangladesh", "+880"), OrraPhoneCountry("Indonesia", "+62"),
+    OrraPhoneCountry("Malaysia", "+60"), OrraPhoneCountry("Philippines", "+63"),
+    OrraPhoneCountry("Singapore", "+65"), OrraPhoneCountry("Japan", "+81"),
+    OrraPhoneCountry("South Korea", "+82"), OrraPhoneCountry("China", "+86"),
+    OrraPhoneCountry("Australia", "+61"), OrraPhoneCountry("New Zealand", "+64"),
+    OrraPhoneCountry("South Africa", "+27"), OrraPhoneCountry("Nigeria", "+234"),
+    OrraPhoneCountry("Kenya", "+254"), OrraPhoneCountry("Brazil", "+55"),
+    OrraPhoneCountry("Mexico", "+52"), OrraPhoneCountry("Argentina", "+54")
+)
 
 private fun saveOrraContact(context: Context, name: String, number: String) {
     val ops = arrayListOf(
@@ -148,6 +180,12 @@ fun ChatScreen() {
     var isSignUp by remember { mutableStateOf(false) }
     var authMethod by remember { mutableStateOf("email") }
     var phoneInput by remember { mutableStateOf("") }
+    var phoneCountryCode by remember { mutableStateOf(prefs.getString("phone_country_code", "+20").orEmpty().ifBlank { "+20" }) }
+    var countryMenuExpanded by remember { mutableStateOf(false) }
+    val internationalPhone = remember(phoneInput, phoneCountryCode) {
+        val raw = phoneInput.trim().replace(Regex("[^0-9+]"), "")
+        if (raw.startsWith("+")) raw else phoneCountryCode + raw.removePrefix("0")
+    }
     var phoneOtp by remember { mutableStateOf("") }
     var phoneOtpSent by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
@@ -617,20 +655,37 @@ fun ChatScreen() {
             } else {
                 Text("Sign in or create an account using a verified mobile number.")
                 if (!phoneOtpSent) {
-                    OutlinedTextField(
-                        phoneInput, { phoneInput = it }, Modifier.fillMaxWidth(),
-                        label = { Text("Mobile number (+20...)") }, singleLine = true
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box {
+                            OutlinedButton(onClick = { countryMenuExpanded = true }) {
+                                Text((orraPhoneCountries.firstOrNull { it.code == phoneCountryCode }?.name ?: "Country") + " " + phoneCountryCode)
+                            }
+                            DropdownMenu(expanded = countryMenuExpanded, onDismissRequest = { countryMenuExpanded = false }) {
+                                orraPhoneCountries.forEach { country ->
+                                    DropdownMenuItem(
+                                        text = { Text(country.name + " (" + country.code + ")") },
+                                        onClick = {
+                                            phoneCountryCode = country.code
+                                            prefs.edit().putString("phone_country_code", country.code).apply()
+                                            countryMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        OutlinedTextField(phoneInput, { phoneInput = it }, Modifier.weight(1f),
+                            label = { Text("Mobile number") }, singleLine = true)
+                    }
                     if (isSignUp) OutlinedTextField(
                         requestedUsername, { requestedUsername = it }, Modifier.fillMaxWidth(),
                         label = { Text("Username (optional)") }, singleLine = true
                     )
-                    Button(enabled = !busy && phoneInput.filter { it.isDigit() }.length >= 10,
+                    Button(enabled = !busy && phoneInput.filter { it.isDigit() }.length >= 6,
                         onClick = {
                             runTask {
                                 withContext(Dispatchers.IO) {
                                     SupabaseChatClient(context, projectUrl, publishableKey)
-                                        .sendPhoneOtp(phoneInput, requestedUsername)
+                                        .sendPhoneOtp(internationalPhone, requestedUsername)
                                 }
                                 phoneOtpSent = true
                                 error = "A one-time code was requested. Check the SMS inbox for this number."
@@ -649,7 +704,7 @@ fun ChatScreen() {
                             runTask {
                                 val response = withContext(Dispatchers.IO) {
                                     SupabaseChatClient(context, projectUrl, publishableKey)
-                                        .verifyPhoneOtp(phoneInput, phoneOtp)
+                                        .verifyPhoneOtp(internationalPhone, phoneOtp)
                                 }
                                 val access = response.optString("access_token")
                                 val user = response.optJSONObject("user")
@@ -657,7 +712,7 @@ fun ChatScreen() {
                                 if (access.isBlank()) throw IllegalStateException("No login session was returned.")
                                 val id = user.optString("id")
                                 val name = user.optJSONObject("user_metadata")?.optString("username")
-                                    ?.takeIf { !it.isNullOrBlank() } ?: phoneInput.takeLast(4).let { "user_$it" }
+                                    ?.takeIf { !it.isNullOrBlank() } ?: internationalPhone.takeLast(4).let { "user_$it" }
                                 val nextRefresh = response.optString("refresh_token")
                                 val expiresIn = response.optLong("expires_in", 3600L)
                                 SupabaseChatClient.saveSession(context, access, id, name, nextRefresh, expiresIn)
