@@ -135,6 +135,38 @@ class SupabaseChatClient(
         return JSONObject(request("/auth/v1/token?grant_type=password", "POST", body, false))
     }
 
+    fun sendPhoneOtp(phone: String, username: String = ""): JSONObject {
+        val normalized = normalizePhone(phone)
+        val body = JSONObject().put("phone", normalized).put("create_user", true)
+        if (username.isNotBlank()) body.put("data", JSONObject().put("username", username.trim().lowercase()))
+        return JSONObject(request("/auth/v1/otp", "POST", body, false))
+    }
+
+    fun verifyPhoneOtp(phone: String, code: String): JSONObject {
+        require(code.trim().matches(Regex("\\d{6}"))) { "Enter the 6-digit SMS code." }
+        val body = JSONObject().put("type", "sms").put("phone", normalizePhone(phone)).put("token", code.trim())
+        return JSONObject(request("/auth/v1/verify", "POST", body, false))
+    }
+
+    fun saveVerifiedPhone(phone: String) {
+        val uid = currentUserId ?: throw IllegalStateException("Sign in again.")
+        request("/rest/v1/profiles?id=eq." + encode(uid), "PATCH",
+            JSONObject().put("phone_number", normalizePhone(phone)).put("updated_at", java.time.Instant.now().toString()))
+    }
+
+    private fun normalizePhone(raw: String): String {
+        val value = raw.trim().replace(Regex("[^0-9+]"), "")
+        require(value.isNotBlank()) { "Enter a phone number." }
+        if (value.startsWith("+")) return value
+        val digits = value.filter { it.isDigit() }
+        return when {
+            digits.startsWith("00") -> "+" + digits.drop(2)
+            digits.startsWith("0") -> "+20" + digits.drop(1)
+            digits.startsWith("20") -> "+$digits"
+            else -> "+$digits"
+        }
+    }
+
     fun refreshSession(refreshToken: String): JSONObject {
         require(refreshToken.isNotBlank()) { "Refresh token is missing. Sign in again." }
         return JSONObject(request(
