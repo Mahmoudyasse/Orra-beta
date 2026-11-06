@@ -78,6 +78,8 @@ class MainActivity : ComponentActivity() {
             if (split <= 0) null else Uri.decode(part.substring(0, split)) to Uri.decode(part.substring(split + 1))
         }.toMap()
         val access = values["access_token"].orEmpty()
+        val refresh = values["refresh_token"].orEmpty()
+        val expires = values["expires_in"]?.toLongOrNull() ?: 3600L
         if (access.isBlank()) return
         Thread {
             try {
@@ -94,7 +96,7 @@ class MainActivity : ComponentActivity() {
                 if (id.isNotBlank()) {
                     val email = user.optString("email")
                     val name = user.optJSONObject("user_metadata")?.optString("username")?.takeIf { !it.isNullOrBlank() } ?: email.substringBefore("@")
-                    SupabaseChatClient.saveSession(this, access, id, name)
+                    SupabaseChatClient.saveSession(this, access, id, name, refresh, expires)
                     runOnUiThread { recreate() }
                 }
             } catch (_: Exception) { }
