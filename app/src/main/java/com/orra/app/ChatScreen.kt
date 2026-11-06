@@ -445,11 +445,15 @@ fun ChatScreen() {
         }
     }
 
-    DisposableEffect(client, dndEnabled) {
+    DisposableEffect(client) {
         onDispose {
             recorder.stop()
             runCatching { player?.release() }
-            Thread { runCatching { client?.updatePresence(false, dndEnabled, false, null) } }.start()
+            Thread {
+                val finalDnd = context.getSharedPreferences("orra_chat_backend", Context.MODE_PRIVATE)
+                    .getBoolean("orra_dnd_enabled", false)
+                runCatching { client?.updatePresence(false, finalDnd, false, null) }
+            }.start()
         }
     }
 
