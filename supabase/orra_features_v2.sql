@@ -4,6 +4,7 @@
 alter table public.profiles
   add column if not exists display_name text,
   add column if not exists bio text not null default '',
+  add column if not exists phone_number text,
   add column if not exists avatar_url text,
   add column if not exists cover_url text,
   add column if not exists updated_at timestamptz not null default now();
@@ -83,7 +84,7 @@ grant select, insert, update, delete on public.blocked_users to authenticated;
 grant select, insert, update, delete on public.conversation_settings to authenticated;
 grant select, insert, delete on public.message_deletions to authenticated;
 grant update (body, edited_at, deleted_for_everyone, media_url, message_type) on public.messages to authenticated;
-grant update (display_name, bio, avatar_url, cover_url, updated_at) on public.profiles to authenticated;
+grant update (display_name, bio, phone_number, avatar_url, cover_url, updated_at) on public.profiles to authenticated;
 
 create or replace function public.create_orra_group(group_title text, member_ids uuid[])
 returns uuid
