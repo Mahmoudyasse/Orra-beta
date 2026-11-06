@@ -738,7 +738,6 @@ fun ChatScreen() {
                 Column(Modifier.weight(1f)) {
                     Text("ORRA Chats", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Text("@$username", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (backupStatus.isNotBlank()) Text(backupStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 }
                 TextButton(onClick = {
                     dndEnabled = !dndEnabled
@@ -1021,7 +1020,6 @@ fun ChatScreen() {
                     }
                 }
             }
-            if (voiceStatus.isNotBlank()) Text(voiceStatus, style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (!selected!!.isAi) {
@@ -1166,7 +1164,6 @@ fun ChatScreen() {
                         }) { Text("Confirm phone number") }
                         TextButton(onClick = { phoneOtpPending = false; phoneOtpCode = "" }) { Text("Cancel verification") }
                     }
-                    if (phoneStatus.isNotBlank()) Text(phoneStatus, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { avatarPicker.launch("image/*") }) { Icon(Icons.Default.Person, null); Text(" Photo") }
