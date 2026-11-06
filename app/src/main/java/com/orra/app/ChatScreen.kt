@@ -293,7 +293,7 @@ fun ChatScreen() {
                 }
                 val path = withContext(Dispatchers.IO) {
                     client.uploadMedia("orra-chat-media", file,
-                        "$userId/\${active.id}/\${System.currentTimeMillis()}_\${file.name}", mime)
+                        "$userId/" + active.id + "/" + System.currentTimeMillis() + "_" + file.name, mime)
                 }
                 withContext(Dispatchers.IO) { client.sendAttachment(active.id, file.name, type, path) }
                 messages = withContext(Dispatchers.IO) { client.loadMessages(active.id) }
