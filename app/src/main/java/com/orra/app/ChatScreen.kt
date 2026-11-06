@@ -557,6 +557,18 @@ fun ChatScreen() {
             TextButton(onClick = { isSignUp = !isSignUp; error = "" }) {
                 Text(if (isSignUp) "Already have an account? Sign in" else "Create a new ORRA account")
             }
+            OutlinedButton(
+                onClick = {
+                    val authUrl = Uri.parse(projectUrl.trimEnd('/') + "/auth/v1/authorize").buildUpon()
+                        .appendQueryParameter("provider", "google")
+                        .appendQueryParameter("redirect_to", "com.orra.beta://auth-callback/")
+                        .build()
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, authUrl)) }
+                        .onFailure { error = "Could not open Google sign-in." }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Continue with Google") }
+            Text("Google sign-in requires the Google provider and OAuth credentials to be enabled in Supabase.")
             Text("Use a unique password. ORRA never needs passwords from other apps.")
         } else if (selected == null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
