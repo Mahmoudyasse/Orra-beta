@@ -45,12 +45,13 @@ fun CallsScreen() {
     val context = LocalContext.current
     var entries by remember { mutableStateOf(readOrraCallHistory(context)) }
     var query by remember { mutableStateOf("") }
+    var directionFilter by remember { mutableStateOf("All") }
     var showClearDialog by remember { mutableStateOf(false) }
     val startCall = rememberOrraCallAction()
     val filteredEntries = remember(entries, query) {
-        if (query.isBlank()) entries
-        else entries.filter {
-            it.name.contains(query, ignoreCase = true) || it.number.contains(query, ignoreCase = true)
+        entries.filter { entry ->
+            (directionFilter == "All" || entry.direction.equals(directionFilter, ignoreCase = true)) &&
+                (query.isBlank() || entry.name.contains(query, ignoreCase = true) || entry.number.contains(query, ignoreCase = true))
         }
     }
 
@@ -66,7 +67,7 @@ fun CallsScreen() {
             Column(Modifier.weight(1f)) {
                 Text("Calls", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "Numbers opened from ORRA",
+                    "Incoming and outgoing calls handled by ORRA",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
@@ -77,6 +78,12 @@ fun CallsScreen() {
         }
 
         if (entries.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("All", "Incoming", "Outgoing").forEach { filter ->
+                    if (directionFilter == filter) androidx.compose.material3.Button(onClick = { directionFilter = filter }) { Text(filter) }
+                    else OutlinedButton(onClick = { directionFilter = filter }) { Text(filter) }
+                }
+            }
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
@@ -122,6 +129,8 @@ fun CallsScreen() {
                         Column(Modifier.weight(1f)) {
                             Text(entry.name, fontWeight = FontWeight.Medium)
                             Text(entry.number, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                            Text(entry.direction, style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary)
                             Text(
                                 DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
                                     .format(Date(entry.timestamp)),
