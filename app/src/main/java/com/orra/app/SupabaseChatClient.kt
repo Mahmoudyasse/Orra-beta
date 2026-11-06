@@ -414,6 +414,8 @@ class SupabaseChatClient(
     }
 
     fun uploadMedia(bucket: String, file: File, objectPath: String, mimeType: String): String {
+        val maxBytes = if (bucket == "orra-profiles") 5L * 1024L * 1024L else 20L * 1024L * 1024L
+        require(file.length() in 1..maxBytes) { "File must be between 1 byte and ${maxBytes / (1024L * 1024L)} MB." }
         val safePath = objectPath.split("/").joinToString("/") { encode(it) }
         val connection = openHttp(URL(projectUrl.trimEnd('/') + "/storage/v1/object/" + bucket + "/" + safePath))
         try {
