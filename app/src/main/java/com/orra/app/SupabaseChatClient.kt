@@ -66,6 +66,10 @@ class SupabaseChatClient(
 
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
+    fun testConnection() {
+        request("/rest/v1/", "GET", null, false)
+    }
+
     private fun openHttp(url: URL): HttpURLConnection {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val enabled = prefs.getBoolean("proxy_enabled", false)
