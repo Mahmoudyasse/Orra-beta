@@ -3,6 +3,7 @@ package com.orra.app
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -34,7 +35,13 @@ class OrraCallForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val video = intent?.getBooleanExtra(EXTRA_VIDEO, false) == true
+        val openApp = PendingIntent.getActivity(
+            this, 0, Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentIntent(openApp)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("ORRA call in progress")
             .setContentText(if (video) "Video call is active" else "Audio call is active")
