@@ -44,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,7 +53,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.app.Activity
 
 class MainActivity : ComponentActivity() {
@@ -121,6 +126,25 @@ private val tabs = listOf(
 
 @Composable
 fun OrraApp() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var incomingCall by remember { mutableStateOf<OrraInternetCall?>(null) }
+    var incomingCallError by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        val prefs = context.getSharedPreferences(SupabaseChatClient.PREFS, android.content.Context.MODE_PRIVATE)
+        while (isActive) {
+            if (OrraInternetCallState.callId == null) {
+                val userId = prefs.getString("user_id", "").orEmpty()
+                val token = prefs.getString("token", "").orEmpty()
+                if (userId.isNotBlank() && token.isNotBlank()) {
+                    incomingCall = runCatching {
+                        withContext(Dispatchers.IO) { OrraCallSignaling(context, userId, token).incomingCalls().firstOrNull() }
+                    }.getOrNull()
+                } else incomingCall = null
+            } else incomingCall = null
+            delay(2500)
+        }
+    }
     var splash by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) { delay(1200); splash = false }
     if (splash) { Splash(); return }
@@ -154,6 +178,48 @@ fun OrraApp() {
                 OrraDynamicIsland()
             }
         }
+    }
+    val pendingCall = incomingCall
+    if (pendingCall != null && OrraInternetCallState.callId == null) {
+        val prefs = context.getSharedPreferences(SupabaseChatClient.PREFS, android.content.Context.MODE_PRIVATE)
+        val userId = prefs.getString("user_id", "").orEmpty()
+        val token = prefs.getString("token", "").orEmpty()
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text(if (pendingCall.type == "video") "Incoming ORRA video call" else "Incoming ORRA voice call") },
+            text = {
+                Column {
+                    Text("ORRA contact is calling you.")
+                    if (incomingCallError.isNotBlank()) Text(incomingCallError, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    scope.launch {
+                        val result = runCatching {
+                            withContext(Dispatchers.IO) { OrraCallSignaling(context, userId, token).updateStatus(pendingCall.id, "accepted") }
+                        }
+                        result.onSuccess {
+                            recordOrraInternetCall(context, "ORRA contact", pendingCall.callerId, "Incoming", pendingCall.type)
+                            OrraInternetCallState.begin(pendingCall, "ORRA contact", false, userId, token)
+                            incomingCall = null
+                            incomingCallError = ""
+                        }.onFailure { incomingCallError = it.message ?: "Could not answer the call." }
+                    }
+                }) { Text("Answer") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        val result = runCatching {
+                            withContext(Dispatchers.IO) { OrraCallSignaling(context, userId, token).updateStatus(pendingCall.id, "rejected") }
+                        }
+                        result.onSuccess { incomingCall = null; incomingCallError = "" }
+                            .onFailure { incomingCallError = it.message ?: "Could not decline the call." }
+                    }
+                }) { Text("Decline") }
+            }
+        )
     }
 }
 
