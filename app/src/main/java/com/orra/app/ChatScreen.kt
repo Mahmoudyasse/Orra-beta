@@ -146,6 +146,10 @@ fun ChatScreen() {
     var password by remember { mutableStateOf("") }
     var requestedUsername by remember { mutableStateOf("") }
     var isSignUp by remember { mutableStateOf(false) }
+    var authMethod by remember { mutableStateOf("email") }
+    var phoneInput by remember { mutableStateOf("") }
+    var phoneOtp by remember { mutableStateOf("") }
+    var phoneOtpSent by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
     var conversationSearch by remember { mutableStateOf("") }
     var chatSection by remember { mutableStateOf("all") }
@@ -527,49 +531,117 @@ fun ChatScreen() {
             }, modifier = Modifier.fillMaxWidth()) { Text("Save server connection") }
         } else if (!signedIn) {
             Text("ORRA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text(if (isSignUp) "Create your account" else "Sign in")
-            if (isSignUp) OutlinedTextField(requestedUsername, { requestedUsername = it }, Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true)
-            OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email") }, singleLine = true)
-            OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
-            Button(enabled = !busy && email.contains("@") && password.length >= 8 && (!isSignUp || requestedUsername.length >= 3),
-                onClick = {
-                    val api = SupabaseChatClient(context, projectUrl, publishableKey)
-                    runTask {
-                        val response = withContext(Dispatchers.IO) {
-                            if (isSignUp) api.signUp(email, password, requestedUsername) else api.signIn(email, password)
+            Text("Choose how to access your ORRA account.")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (authMethod == "email") Button(onClick = { authMethod = "email"; phoneOtpSent = false; error = "" }) { Text("Email") }
+                else OutlinedButton(onClick = { authMethod = "email"; error = "" }) { Text("Email") }
+                if (authMethod == "phone") Button(onClick = { authMethod = "phone"; error = "" }) { Text("Phone / SIM") }
+                else OutlinedButton(onClick = { authMethod = "phone"; error = "" }) { Text("Phone / SIM") }
+            }
+            if (authMethod == "email") {
+                Text(if (isSignUp) "Create your account" else "Sign in")
+                if (isSignUp) OutlinedTextField(requestedUsername, { requestedUsername = it }, Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true)
+                OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email") }, singleLine = true)
+                OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+                Button(enabled = !busy && email.contains("@") && password.length >= 8 && (!isSignUp || requestedUsername.length >= 3),
+                    onClick = {
+                        val api = SupabaseChatClient(context, projectUrl, publishableKey)
+                        runTask {
+                            val response = withContext(Dispatchers.IO) {
+                                if (isSignUp) api.signUp(email, password, requestedUsername) else api.signIn(email, password)
+                            }
+                            val access = response.optString("access_token")
+                            val user = response.optJSONObject("user")
+                            if (access.isBlank() || user == null) error = "Account created. Confirm your email if required, then sign in."
+                            else {
+                                val id = user.optString("id")
+                                val name = user.optJSONObject("user_metadata")?.optString("username")
+                                    ?.takeIf { !it.isNullOrBlank() } ?: email.substringBefore("@")
+                                val nextRefresh = response.optString("refresh_token")
+                                val expiresIn = response.optLong("expires_in", 3600L)
+                                SupabaseChatClient.saveSession(context, access, id, name, nextRefresh, expiresIn)
+                                token = access; refreshToken = nextRefresh; userId = id; username = name
+                            }
                         }
-                        val access = response.optString("access_token")
-                        val user = response.optJSONObject("user")
-                        if (access.isBlank() || user == null) error = "Account created. Confirm your email if required, then sign in."
-                        else {
-                            val id = user.optString("id")
-                            val name = user.optJSONObject("user_metadata")?.optString("username")
-                                ?.takeIf { !it.isNullOrBlank() } ?: email.substringBefore("@")
-                            val nextRefresh = response.optString("refresh_token")
-                            val expiresIn = response.optLong("expires_in", 3600L)
-                            SupabaseChatClient.saveSession(context, access, id, name, nextRefresh, expiresIn)
-                            token = access; refreshToken = nextRefresh; userId = id; username = name
-                        }
+                    }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (busy) "Please wait…" else if (isSignUp) "Create account" else "Sign in")
+                }
+                TextButton(onClick = { isSignUp = !isSignUp; error = "" }) {
+                    Text(if (isSignUp) "Already have an account? Sign in" else "Create a new ORRA account")
+                }
+                OutlinedButton(
+                    onClick = {
+                        val authUrl = Uri.parse(projectUrl.trimEnd('/') + "/auth/v1/authorize").buildUpon()
+                            .appendQueryParameter("provider", "google")
+                            .appendQueryParameter("redirect_to", "com.orra.beta://auth-callback/")
+                            .build()
+                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, authUrl)) }
+                            .onFailure { error = "Could not open Google sign-in." }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Continue with Google") }
+                Text("Google sign-in requires the Google provider and OAuth credentials to be enabled in Supabase.")
+            } else {
+                Text("Sign in or create an account using a verified mobile number.")
+                if (!phoneOtpSent) {
+                    OutlinedTextField(
+                        phoneInput, { phoneInput = it }, Modifier.fillMaxWidth(),
+                        label = { Text("Mobile number (+20...)") }, singleLine = true
+                    )
+                    if (isSignUp) OutlinedTextField(
+                        requestedUsername, { requestedUsername = it }, Modifier.fillMaxWidth(),
+                        label = { Text("Username (optional)") }, singleLine = true
+                    )
+                    Button(enabled = !busy && phoneInput.filter { it.isDigit() }.length >= 10,
+                        onClick = {
+                            runTask {
+                                withContext(Dispatchers.IO) {
+                                    SupabaseChatClient(context, projectUrl, publishableKey)
+                                        .sendPhoneOtp(phoneInput, requestedUsername)
+                                }
+                                phoneOtpSent = true
+                                error = "A one-time code was requested. Check the SMS inbox for this number."
+                            }
+                        }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (busy) "Sending…" else "Send SMS code")
                     }
-                }, modifier = Modifier.fillMaxWidth()) {
-                Text(if (busy) "Please wait…" else if (isSignUp) "Create account" else "Sign in")
+                } else {
+                    Text("Enter the six-digit code sent by SMS.")
+                    OutlinedTextField(
+                        phoneOtp, { phoneOtp = it.filter(Char::isDigit).take(6) },
+                        Modifier.fillMaxWidth(), label = { Text("SMS verification code") }, singleLine = true
+                    )
+                    Button(enabled = !busy && phoneOtp.length == 6,
+                        onClick = {
+                            runTask {
+                                val response = withContext(Dispatchers.IO) {
+                                    SupabaseChatClient(context, projectUrl, publishableKey)
+                                        .verifyPhoneOtp(phoneInput, phoneOtp)
+                                }
+                                val access = response.optString("access_token")
+                                val user = response.optJSONObject("user")
+                                    ?: throw IllegalStateException("The SMS code was not accepted.")
+                                if (access.isBlank()) throw IllegalStateException("No login session was returned.")
+                                val id = user.optString("id")
+                                val name = user.optJSONObject("user_metadata")?.optString("username")
+                                    ?.takeIf { !it.isNullOrBlank() } ?: phoneInput.takeLast(4).let { "user_$it" }
+                                val nextRefresh = response.optString("refresh_token")
+                                val expiresIn = response.optLong("expires_in", 3600L)
+                                SupabaseChatClient.saveSession(context, access, id, name, nextRefresh, expiresIn)
+                                withContext(Dispatchers.IO) {
+                                    SupabaseChatClient(context, projectUrl, publishableKey, access, id)
+                                        .saveVerifiedPhone(phoneInput)
+                                }
+                                token = access; refreshToken = nextRefresh; userId = id; username = name
+                                phoneOtpSent = false
+                                phoneOtp = ""
+                            }
+                        }, modifier = Modifier.fillMaxWidth()) { Text(if (busy) "Verifying…" else "Verify and sign in") }
+                    TextButton(onClick = { phoneOtpSent = false; phoneOtp = ""; error = "" }) { Text("Change number") }
+                }
+                Text("SMS delivery requires an enabled SMS provider in Supabase Auth. The SIM only receives the code; ORRA does not read SMS messages.")
             }
-            TextButton(onClick = { isSignUp = !isSignUp; error = "" }) {
-                Text(if (isSignUp) "Already have an account? Sign in" else "Create a new ORRA account")
-            }
-            OutlinedButton(
-                onClick = {
-                    val authUrl = Uri.parse(projectUrl.trimEnd('/') + "/auth/v1/authorize").buildUpon()
-                        .appendQueryParameter("provider", "google")
-                        .appendQueryParameter("redirect_to", "com.orra.beta://auth-callback/")
-                        .build()
-                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, authUrl)) }
-                        .onFailure { error = "Could not open Google sign-in." }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Continue with Google") }
-            Text("Google sign-in requires the Google provider and OAuth credentials to be enabled in Supabase.")
-            Text("Use a unique password. ORRA never needs passwords from other apps.")
+            Text("Use your own verified account. Never share your one-time code.")
         } else if (selected == null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
