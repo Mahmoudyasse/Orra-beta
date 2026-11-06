@@ -189,3 +189,28 @@ end;
 $$;
 revoke all on function public.orra_restore_chat_backup(uuid) from public,anon;
 grant execute on function public.orra_restore_chat_backup(uuid) to authenticated;
+-- Only verified phone numbers are discoverable from the keypad.
+alter table public.profiles add column if not exists phone_verified boolean not null default false;
+
+create or replace function public.orra_sync_verified_phone()
+returns trigger
+language plpgsql
+security definer
+set search_path=public
+as $$
+begin
+  if new.phone is not null then
+    update public.profiles
+      set phone_number=new.phone,
+          phone_verified=(new.phone_confirmed_at is not null),
+          updated_at=now()
+    where id=new.id;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists orra_sync_verified_phone_after_auth_update on auth.users;
+create trigger orra_sync_verified_phone_after_auth_update
+after update of phone,phone_confirmed_at on auth.users
+for each row execute function public.orra_sync_verified_phone();
+revoke all on function public.orra_sync_verified_phone() from public,anon,authenticated;
