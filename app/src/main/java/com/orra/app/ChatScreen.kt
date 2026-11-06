@@ -594,6 +594,19 @@ fun ChatScreen() {
                                     Text(conversation.lastMessage, maxLines = 1,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         style = MaterialTheme.typography.bodySmall)
+                                    if (!conversation.isGroup) {
+                                        val presence = presenceByUser[conversation.peerUserId]
+                                        Text(
+                                            when {
+                                                presence?.dnd == true -> "● Do not disturb"
+                                                presence?.online == true -> "● Online"
+                                                else -> "○ Offline"
+                                            },
+                                            color = if (presence?.dnd == true) MaterialTheme.colorScheme.error
+                                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
                                 }
                                 if (conversation.isGroup) Text("${conversation.memberCount}", style = MaterialTheme.typography.labelSmall)
                             }
