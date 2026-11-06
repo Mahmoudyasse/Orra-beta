@@ -658,10 +658,6 @@ fun ChatScreen() {
                                 val nextRefresh = response.optString("refresh_token")
                                 val expiresIn = response.optLong("expires_in", 3600L)
                                 SupabaseChatClient.saveSession(context, access, id, name, nextRefresh, expiresIn)
-                                withContext(Dispatchers.IO) {
-                                    SupabaseChatClient(context, projectUrl, publishableKey, access, id)
-                                        .saveVerifiedPhone(phoneInput)
-                                }
                                 token = access; refreshToken = nextRefresh; userId = id; username = name
                                 phoneOtpSent = false
                                 phoneOtp = ""
