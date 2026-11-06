@@ -271,15 +271,17 @@ fun ChatScreen() {
         val active = selected
         if (uri != null && active != null && client != null) runTask {
             val file = withContext(Dispatchers.IO) { copyUriToCache(context, uri) }
-            val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
-            val type = if (mime.startsWith("image/")) "image" else "file"
-            val path = withContext(Dispatchers.IO) {
-                client.uploadMedia("orra-chat-media", file,
-                    "$userId/${active.id}/${System.currentTimeMillis()}_${file.name}", mime)
-            }
-            withContext(Dispatchers.IO) { client.sendAttachment(active.id, "", type, path) }
-            file.delete()
-            messages = withContext(Dispatchers.IO) { client.loadMessages(active.id) }
+            try {
+                require(file.length() <= 20L * 1024L * 1024L) { "Files larger than 20 MB are not supported yet." }
+                val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+                val type = if (mime.startsWith("image/")) "image" else "file"
+                val path = withContext(Dispatchers.IO) {
+                    client.uploadMedia("orra-chat-media", file,
+                        "$userId/${active.id}/${System.currentTimeMillis()}_${file.name}", mime)
+                }
+                withContext(Dispatchers.IO) { client.sendAttachment(active.id, "", type, path) }
+                messages = withContext(Dispatchers.IO) { client.loadMessages(active.id) }
+            } finally { file.delete() }
         }
     }
     val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
