@@ -29,6 +29,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -60,6 +62,12 @@ fun SettingsScreen() {
         if (backupUserId.isNotBlank() && backupToken.isNotBlank()) SupabaseChatClient(context, SupabaseChatClient.DEFAULT_PROJECT_URL, SupabaseChatClient.DEFAULT_PUBLISHABLE_KEY, backupToken, backupUserId) else null
     }
     var backupStatus by remember { mutableStateOf("") }
+    var proxyHost by remember { mutableStateOf(prefs.getString("proxy_host", "").orEmpty()) }
+    var proxyPort by remember { mutableStateOf(prefs.getInt("proxy_port", 0).takeIf { it > 0 }?.toString().orEmpty()) }
+    var proxyType by remember { mutableStateOf(prefs.getString("proxy_type", "http").orEmpty()) }
+    var proxyEnabled by remember { mutableStateOf(prefs.getBoolean("proxy_enabled", false)) }
+    var proxyStatus by remember { mutableStateOf("") }
+    var proxyBusy by remember { mutableStateOf(false) }
     var backupBusy by remember { mutableStateOf(false) }
     var notificationsAllowed by remember { mutableStateOf(Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notificationsAllowed = it }
@@ -110,6 +118,56 @@ fun SettingsScreen() {
                 }
                 Text("iPhone Island Liquid styling uses subtle translucent surfaces and restrained neon accents.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+            }
+        }
+
+        Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Connection proxy", fontWeight = FontWeight.SemiBold)
+                Text("Routes ORRA's Supabase API requests through this proxy. It does not route Android phone calls or every third-party connection.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Use proxy", modifier = Modifier.weight(1f))
+                    Switch(checked = proxyEnabled, onCheckedChange = { proxyEnabled = it })
+                }
+                OutlinedTextField(value = proxyHost, onValueChange = { proxyHost = it }, modifier = Modifier.fillMaxWidth(),
+                    singleLine = true, label = { Text("Proxy host / IP") })
+                OutlinedTextField(value = proxyPort, onValueChange = { proxyPort = it.filter(Char::isDigit).take(5) },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Port (1–65535)") })
+                Text("Proxy type", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (proxyType == "http") Button(onClick = { proxyType = "http" }) { Text("HTTP") }
+                    else OutlinedButton(onClick = { proxyType = "http" }) { Text("HTTP") }
+                    if (proxyType == "socks") Button(onClick = { proxyType = "socks" }) { Text("SOCKS") }
+                    else OutlinedButton(onClick = { proxyType = "socks" }) { Text("SOCKS") }
+                }
+                if (proxyStatus.isNotBlank()) Text(proxyStatus, style = MaterialTheme.typography.bodySmall)
+                Button(enabled = !proxyBusy, modifier = Modifier.fillMaxWidth(), onClick = {
+                    val port = proxyPort.toIntOrNull()
+                    if (proxyEnabled && (proxyHost.isBlank() || port == null || port !in 1..65535)) {
+                        proxyStatus = "Enter a valid proxy host and port."
+                    } else {
+                        SupabaseChatClient.saveProxy(context, proxyHost, port ?: 0, proxyType, proxyEnabled)
+                        proxyStatus = "Proxy settings saved."
+                    }
+                }) { Text("Save proxy settings") }
+                OutlinedButton(enabled = !proxyBusy && backupClient != null, modifier = Modifier.fillMaxWidth(), onClick = {
+                    val port = proxyPort.toIntOrNull()
+                    if (proxyEnabled && (proxyHost.isBlank() || port == null || port !in 1..65535)) {
+                        proxyStatus = "Enter a valid proxy host and port first."
+                    } else {
+                        SupabaseChatClient.saveProxy(context, proxyHost, port ?: 0, proxyType, proxyEnabled)
+                        scope.launch {
+                            proxyBusy = true
+                            proxyStatus = try {
+                                withContext(Dispatchers.IO) { backupClient!!.testConnection() }
+                                "Connected: Supabase API is reachable using the current connection settings."
+                            } catch (e: Exception) { "Connection failed: " + (e.message ?: "check the proxy and network.") }
+                            proxyBusy = false
+                        }
+                    }
+                }) { Text(if (proxyBusy) "Testing…" else "Test connection") }
+                if (backupClient == null) Text("Sign in to test the Supabase connection.", style = MaterialTheme.typography.bodySmall)
             }
         }
 
