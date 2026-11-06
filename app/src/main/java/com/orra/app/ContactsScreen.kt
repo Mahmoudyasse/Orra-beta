@@ -2,6 +2,7 @@ package com.orra.app
 
 import android.Manifest
 import android.content.Intent
+import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,12 +22,15 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -62,6 +66,13 @@ fun ContactsScreen() {
     var contacts by remember { mutableStateOf<List<PhoneContact>>(emptyList()) }
     var search by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    var showFavorites by remember { mutableStateOf(false) }
+    var favoriteNumbers by remember {
+        mutableStateOf(
+            context.getSharedPreferences("orra_contacts", Context.MODE_PRIVATE)
+                .getStringSet("favorites", emptySet())?.toSet() ?: emptySet()
+        )
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -146,6 +157,10 @@ fun ContactsScreen() {
                 }
             }
         } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { showFavorites = false }) { Text(if (!showFavorites) "• All contacts" else "All contacts") }
+                TextButton(onClick = { showFavorites = true }) { Text(if (showFavorites) "• Favorites" else "Favorites") }
+            }
             OutlinedTextField(
                 value = search,
                 onValueChange = { search = it },
@@ -156,10 +171,13 @@ fun ContactsScreen() {
             when {
                 loading -> Text("Loading contacts…")
                 contacts.isEmpty() -> Text("No contacts with phone numbers were found.")
+                showFavorites && contacts.none { favoriteNumbers.contains(it.number) } ->
+                    Text("No favorite contacts yet. Tap the star beside a contact to add one.")
                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(
                         contacts.filter {
-                            it.name.contains(search, ignoreCase = true) || it.number.contains(search)
+                            (!showFavorites || favoriteNumbers.contains(it.number)) &&
+                                (it.name.contains(search, ignoreCase = true) || it.number.contains(search))
                         },
                         key = { it.number }
                     ) { contact ->
@@ -173,6 +191,20 @@ fun ContactsScreen() {
                             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                                 Text(contact.name, fontWeight = FontWeight.Medium)
                                 Text(contact.number, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+                            }
+                            IconButton(onClick = {
+                                val updated = favoriteNumbers.toMutableSet()
+                                if (updated.contains(contact.number)) updated.remove(contact.number)
+                                else updated.add(contact.number)
+                                favoriteNumbers = updated
+                                context.getSharedPreferences("orra_contacts", Context.MODE_PRIVATE)
+                                    .edit().putStringSet("favorites", updated.toSet()).apply()
+                            }) {
+                                Icon(
+                                    if (favoriteNumbers.contains(contact.number)) Icons.Default.Star else Icons.Default.StarBorder,
+                                    contentDescription = if (favoriteNumbers.contains(contact.number)) "Remove favorite" else "Add favorite",
+                                    tint = if (favoriteNumbers.contains(contact.number)) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
                             }
                             IconButton(onClick = {
                                 val contactUri = ContactsContract.Contacts.getLookupUri(
