@@ -1020,7 +1020,6 @@ fun ChatScreen() {
                     }
                 }
             }
-                color = MaterialTheme.colorScheme.primary)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (!selected!!.isAi) {
                     IconButton(onClick = { showAttachmentMenu = true }, enabled = !busy) {
@@ -1164,8 +1163,7 @@ fun ChatScreen() {
                         }) { Text("Confirm phone number") }
                         TextButton(onClick = { phoneOtpPending = false; phoneOtpCode = "" }) { Text("Cancel verification") }
                     }
-                        color = MaterialTheme.colorScheme.primary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { avatarPicker.launch("image/*") }) { Icon(Icons.Default.Person, null); Text(" Photo") }
                         OutlinedButton(onClick = { coverPicker.launch("image/*") }) { Icon(Icons.Default.Photo, null); Text(" Cover") }
                     }
