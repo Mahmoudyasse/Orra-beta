@@ -174,6 +174,8 @@ fun ChatScreen() {
     var showProfile by remember { mutableStateOf(false) }
     var showGroup by remember { mutableStateOf(false) }
     var showChatOptions by remember { mutableStateOf(false) }
+    var showDeletedHistory by remember { mutableStateOf(false) }
+    var deletedHistory by remember { mutableStateOf<List<String>>(emptyList()) }
     var groupTitle by remember { mutableStateOf("") }
     var addingToGroup by remember { mutableStateOf<OrraChatConversation?>(null) }
     var profile by remember { mutableStateOf<OrraChatProfile?>(null) }
@@ -470,6 +472,15 @@ fun ChatScreen() {
         if (target != null && client != null) {
             messageHistory = runCatching { withContext(Dispatchers.IO) { client.loadMessageHistory(target.id) } }.getOrDefault(emptyList())
         } else messageHistory = emptyList()
+    }
+
+    LaunchedEffect(selected?.id, showDeletedHistory, client) {
+        val active = selected
+        if (showDeletedHistory && active != null && client != null) {
+            deletedHistory = runCatching {
+                withContext(Dispatchers.IO) { client.loadDeletedHistoryForConversation(active.id) }
+            }.getOrDefault(emptyList())
+        }
     }
 
     LaunchedEffect(token, client) {
@@ -1143,6 +1154,10 @@ fun ChatScreen() {
                         }) { Text("Block user") }
                     }
                     TextButton(onClick = {
+                        showDeletedHistory = true
+                        showChatOptions = false
+                    }) { Text("View deleted message history") }
+                    TextButton(onClick = {
                         runTask {
                             withContext(Dispatchers.IO) { client!!.deleteConversationForMe(selected!!.id) }
                             selected = null
@@ -1153,6 +1168,20 @@ fun ChatScreen() {
                 }
             },
             confirmButton = { TextButton(onClick = { showChatOptions = false }) { Text("Close") } }
+        )
+    }
+
+    if (showDeletedHistory) {
+        AlertDialog(
+            onDismissRequest = { showDeletedHistory = false },
+            title = { Text("Deleted message history") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (deletedHistory.isEmpty()) Text("No deleted message events were found in this chat.")
+                    else deletedHistory.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showDeletedHistory = false }) { Text("Close") } }
         )
     }
 
