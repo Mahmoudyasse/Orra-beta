@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
@@ -77,6 +78,8 @@ fun ContactsScreen() {
     var editorNumber by remember { mutableStateOf("") }
     var editorError by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    var deletingContact by remember { mutableStateOf<PhoneContact?>(null) }
+    var deleting by remember { mutableStateOf(false) }
     val startCall = rememberOrraCallAction()
     var favoriteNumbers by remember {
         mutableStateOf(context.getSharedPreferences("orra_contacts", Context.MODE_PRIVATE)
@@ -202,11 +205,51 @@ fun ContactsScreen() {
                             IconButton(onClick = { openEditContact(contact) }) {
                                 Icon(Icons.Default.Edit, contentDescription = "Edit ${contact.name}")
                             }
+                            IconButton(onClick = { deletingContact = contact }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete ${contact.name}")
+                            }
                             IconButton(onClick = { startCall(contact.name, contact.number) }) {
                                 Icon(Icons.Default.Call, contentDescription = "Call ${contact.name}", tint = CallGreen)
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    if (deletingContact != null) {
+        AlertDialog(
+            onDismissRequest = { if (!deleting) deletingContact = null },
+            title = { Text("Delete contact?") },
+            text = { Text("Delete ${deletingContact?.name} from the phone contacts stored on this device? This cannot be undone.") },
+            confirmButton = {
+                TextButton(enabled = !deleting, onClick = {
+                    val target = deletingContact
+                    if (target != null && hasWritePermission) {
+                        deleting = true
+                    } else if (!hasWritePermission) {
+                        permissionLauncher.launch(arrayOf(Manifest.permission.WRITE_CONTACTS, Manifest.permission.READ_CONTACTS))
+                    }
+                }) { Text(if (deleting) "Deleting…" else "Delete") }
+            },
+            dismissButton = {
+                OutlinedButton(enabled = !deleting, onClick = { deletingContact = null }) { Text("Cancel") }
+            }
+        )
+        LaunchedEffect(deleting) {
+            if (deleting) {
+                val target = deletingContact
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { if (target != null) deletePhoneContact(context, target) }
+                }.exceptionOrNull()
+                deleting = false
+                deletingContact = null
+                if (result == null) {
+                    favoriteNumbers = favoriteNumbers - listOfNotNull(target?.number).toSet()
+                    context.getSharedPreferences("orra_contacts", Context.MODE_PRIVATE).edit()
+                        .putStringSet("favorites", favoriteNumbers).apply()
+                    refreshKey++
                 }
             }
         }
@@ -335,4 +378,13 @@ private fun updatePhoneContact(context: Context, contact: PhoneContact, name: St
             .withValue(ContactsContract.CommonDataKinds.Phone.TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE).build())
     }
     context.contentResolver.applyBatch(ContactsContract.AUTHORITY, ops)
+}
+
+private fun deletePhoneContact(context: Context, contact: PhoneContact) {
+    val deleted = context.contentResolver.delete(
+        ContactsContract.Contacts.CONTENT_URI,
+        "${ContactsContract.Contacts._ID}=?",
+        arrayOf(contact.contactId.toString())
+    )
+    if (deleted <= 0) error("Contact was not deleted")
 }
