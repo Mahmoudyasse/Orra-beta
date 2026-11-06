@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -56,6 +57,9 @@ fun SettingsScreen() {
     }
     var backupStatus by remember { mutableStateOf("") }
     var backupBusy by remember { mutableStateOf(false) }
+    var showBlocked by remember { mutableStateOf(false) }
+    var blockedUsers by remember { mutableStateOf<List<OrraBlockedUser>>(emptyList()) }
+    var blockedStatus by remember { mutableStateOf("") }
     var isDefaultDialer by remember { mutableStateOf(isOrraDefaultDialer(context)) }
     val roleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         isDefaultDialer = isOrraDefaultDialer(context)
@@ -157,6 +161,30 @@ fun SettingsScreen() {
                     androidx.compose.material3.Icon(Icons.Default.Settings, contentDescription = null)
                     Text("  App permissions")
                 }
+                OutlinedButton(enabled = backupClient != null, onClick = {
+                    scope.launch {
+                        blockedStatus = "Loading blocked contacts…"
+                        runCatching {
+                            blockedUsers = withContext(Dispatchers.IO) { backupClient!!.loadBlockedUsers() }
+                            blockedStatus = ""
+                            showBlocked = true
+                        }.onFailure { blockedStatus = it.message ?: "Could not load blocked contacts." }
+                    }
+                }) { Text("Blocked contacts") }
+                if (blockedStatus.isNotBlank()) Text(blockedStatus, style = MaterialTheme.typography.bodySmall)
+
+            }
+        }
+
+        Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Share ORRA", fontWeight = FontWeight.SemiBold)
+                Text("Invite someone to install the ORRA beta app.", style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = {
+                    val intent = Intent(Intent.ACTION_SEND).setType("text/plain")
+                        .putExtra(Intent.EXTRA_TEXT, "Try ORRA Beta: https://github.com/Mahmoudyasse/Orra-beta")
+                    context.startActivity(Intent.createChooser(intent, "Share ORRA"))
+                }, modifier = Modifier.fillMaxWidth()) { Text("Share app") }
             }
         }
 
@@ -175,5 +203,31 @@ fun SettingsScreen() {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
             }
         }
+    }
+    if (showBlocked) {
+        AlertDialog(
+            onDismissRequest = { showBlocked = false },
+            title = { Text("Blocked contacts") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (blockedUsers.isEmpty()) Text("You have not blocked anyone.")
+                    blockedUsers.forEach { blocked ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("@${blocked.username}", modifier = Modifier.weight(1f))
+                            TextButton(onClick = {
+                                scope.launch {
+                                    runCatching {
+                                        withContext(Dispatchers.IO) { backupClient!!.unblockUser(blocked.id) }
+                                        blockedUsers = blockedUsers.filterNot { it.id == blocked.id }
+                                    }.onFailure { blockedStatus = it.message ?: "Could not unblock user." }
+                                }
+                            }) { Text("Unblock") }
+                        }
+                    }
+                    if (blockedStatus.isNotBlank()) Text(blockedStatus, style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = { TextButton(onClick = { showBlocked = false }) { Text("Close") } }
+        )
     }
 }
