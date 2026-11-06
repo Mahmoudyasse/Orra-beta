@@ -50,7 +50,7 @@ begin
   end if;
   insert into public.profiles(id, username)
   values (new.id, requested_name)
-  on conflict (id) do nothing;
+  on conflict do nothing;
 
   if not exists (select 1 from public.profiles where id = new.id) then
     insert into public.profiles(id, username)
