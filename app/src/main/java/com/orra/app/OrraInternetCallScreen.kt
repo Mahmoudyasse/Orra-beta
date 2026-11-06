@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.media.AudioManager
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -74,6 +75,7 @@ object OrraInternetCallState {
 
 @Composable
 fun OrraInternetCallScreen() {
+    BackHandler(enabled = true) { }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val callId = OrraInternetCallState.callId ?: return
