@@ -108,7 +108,7 @@ fun ContactsScreen() {
     }
 
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 16.dp),
+        Modifier.fillMaxSize().padding(start = 18.dp, end = 18.dp, top = 58.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
