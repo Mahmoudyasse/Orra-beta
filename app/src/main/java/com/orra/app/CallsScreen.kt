@@ -20,6 +20,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -40,7 +41,14 @@ import java.util.Date
 fun CallsScreen() {
     val context = LocalContext.current
     var entries by remember { mutableStateOf(readOrraCallHistory(context)) }
+    var query by remember { mutableStateOf("") }
     var showClearDialog by remember { mutableStateOf(false) }
+    val filteredEntries = remember(entries, query) {
+        if (query.isBlank()) entries
+        else entries.filter {
+            it.name.contains(query, ignoreCase = true) || it.number.contains(query, ignoreCase = true)
+        }
+    }
 
     LaunchedEffect(Unit) {
         entries = readOrraCallHistory(context)
@@ -64,6 +72,16 @@ fun CallsScreen() {
             }
         }
 
+        if (entries.isNotEmpty()) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text("Search name or number") }
+            )
+        }
+
         if (entries.isEmpty()) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -84,9 +102,15 @@ fun CallsScreen() {
                     )
                 }
             }
+        } else if (filteredEntries.isEmpty()) {
+            Text(
+                "No matching numbers",
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(entries, key = { "${it.timestamp}-${it.number}" }) { entry ->
+                items(filteredEntries, key = { "${it.timestamp}-${it.number}" }) { entry ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically
