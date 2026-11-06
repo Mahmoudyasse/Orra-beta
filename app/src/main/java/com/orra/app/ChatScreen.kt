@@ -133,8 +133,8 @@ fun ChatScreen() {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences(SupabaseChatClient.PREFS, Context.MODE_PRIVATE) }
     val scope = rememberCoroutineScope()
-    var projectUrl by remember { mutableStateOf(prefs.getString("url", "").orEmpty()) }
-    var publishableKey by remember { mutableStateOf(prefs.getString("key", "").orEmpty()) }
+    var projectUrl by remember { mutableStateOf(prefs.getString("url", SupabaseChatClient.DEFAULT_PROJECT_URL).orEmpty().ifBlank { SupabaseChatClient.DEFAULT_PROJECT_URL }) }
+    var publishableKey by remember { mutableStateOf(prefs.getString("key", SupabaseChatClient.DEFAULT_PUBLISHABLE_KEY).orEmpty().ifBlank { SupabaseChatClient.DEFAULT_PUBLISHABLE_KEY }) }
     var token by remember { mutableStateOf(prefs.getString("token", "").orEmpty()) }
     var userId by remember { mutableStateOf(prefs.getString("user_id", "").orEmpty()) }
     var username by remember { mutableStateOf(prefs.getString("username", "").orEmpty()) }
