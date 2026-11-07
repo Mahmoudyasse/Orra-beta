@@ -1,5 +1,9 @@
 package com.orra.app
 
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import android.os.Bundle
 import android.content.Intent
 import android.net.Uri
@@ -65,8 +69,19 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         OrraAppearance.load(this)
+        OrraLang.load(this)
+        OrraEye.load(this)
         consumeAuthCallback(intent)
-        setContent { OrraTheme { if (OrraInternetCallState.callId != null) OrraInternetCallScreen() else if (OrraCallState.activeCall != null) InCallScreen() else OrraApp() } }
+        setContent {
+            OrraTheme {
+                CompositionLocalProvider(LocalLayoutDirection provides if (OrraLang.isRtl()) LayoutDirection.Rtl else LayoutDirection.Ltr) {
+                    Box(Modifier.fillMaxSize()) {
+                        if (OrraInternetCallState.callId != null) OrraInternetCallScreen() else if (OrraCallState.activeCall != null) InCallScreen() else OrraApp()
+                        OrraEyeOverlay()
+                    }
+                }
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -142,7 +157,24 @@ fun OrraApp() {
                     }.getOrNull()
                 } else incomingCall = null
             } else incomingCall = null
-            delay(2500)
+            delay(OrraPower.pollDelay(context, 2500))
+        }
+    }
+    LaunchedEffect(Unit) {
+        OrraPush.fetchToken(context)
+        var pushed = false
+        while (isActive) {
+            val signedIn = OrraPrefs.get(context).getString("token", "").orEmpty().isNotBlank()
+            if (signedIn) {
+                val active = withContext(Dispatchers.IO) { OrraSessionGuard.check(context) }
+                if (!active) {
+                    SupabaseChatClient.clearSession(context)
+                    (context as? Activity)?.recreate()
+                    return@LaunchedEffect
+                }
+                if (!pushed) { withContext(Dispatchers.IO) { OrraSessionGuard.registerPushToken(context) }; pushed = true }
+            }
+            delay(OrraPower.pollDelay(context, 30000))
         }
     }
     var splash by remember { mutableStateOf(true) }
@@ -175,11 +207,15 @@ fun OrraApp() {
                     .align(Alignment.TopCenter)
                     .padding(top = 7.dp)
             ) {
-                OrraDynamicIsland()
+                if (OrraEye.island.value) OrraDynamicIsland()
             }
         }
     }
     val pendingCall = incomingCall
+    DisposableEffect(pendingCall?.id) {
+        if (pendingCall != null) OrraRinger.startIncomingCallRing(context)
+        onDispose { OrraRinger.stop() }
+    }
     if (pendingCall != null && OrraInternetCallState.callId == null && OrraCallState.activeCall == null) {
         val prefs = context.getSharedPreferences(SupabaseChatClient.PREFS, android.content.Context.MODE_PRIVATE)
         val userId = prefs.getString("user_id", "").orEmpty()
@@ -254,8 +290,8 @@ private fun RowScope.NavItem(tab: Tab, selected: Boolean, onClick: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(tab.icon, contentDescription = tab.label, tint = tint, modifier = Modifier.size(24.dp))
-        Text(tab.label, fontSize = 11.sp, color = tint)
+        Icon(tab.icon, contentDescription = tr("tab_" + tab.label.lowercase()), tint = tint, modifier = Modifier.size(24.dp))
+        Text(tr("tab_" + tab.label.lowercase()), fontSize = 11.sp, color = tint)
     }
 }
 

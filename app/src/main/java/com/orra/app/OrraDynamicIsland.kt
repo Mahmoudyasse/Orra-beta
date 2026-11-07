@@ -1,5 +1,6 @@
 package com.orra.app
 
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -39,14 +40,15 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun OrraDynamicIsland() {
     var expanded by remember { mutableStateOf(false) }
+    val animate = OrraPrefs.animationsEnabled(androidx.compose.ui.platform.LocalContext.current)
     val width by animateDpAsState(
         targetValue = if (expanded) 286.dp else 126.dp,
-        animationSpec = tween(260),
+        animationSpec = if (animate) tween(260) else snap(),
         label = "island-width"
     )
     val height by animateDpAsState(
         targetValue = if (expanded) 112.dp else 38.dp,
-        animationSpec = tween(260),
+        animationSpec = if (animate) tween(260) else snap(),
         label = "island-height"
     )
     val shape = RoundedCornerShape(if (expanded) 28.dp else 24.dp)

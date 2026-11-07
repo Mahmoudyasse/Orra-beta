@@ -60,7 +60,7 @@ class SupabaseChatClient(
         fun clearSession(context: Context) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .remove("token").remove("refresh_token").remove("expires_at")
-                .remove("user_id").remove("username").apply()
+                .remove("user_id").remove("username").remove("session_registered").apply()
         }
         fun saveProxy(context: Context, host: String, port: Int, type: String, enabled: Boolean) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
@@ -92,7 +92,7 @@ class SupabaseChatClient(
         return url.openConnection(proxy) as HttpURLConnection
     }
 
-    private fun request(path: String, method: String = "GET", body: JSONObject? = null, authenticated: Boolean = true): String {
+    internal fun request(path: String, method: String = "GET", body: JSONObject? = null, authenticated: Boolean = true): String {
         val connection = openHttp(URL(projectUrl.trimEnd('/') + path))
         try {
             connection.requestMethod = method

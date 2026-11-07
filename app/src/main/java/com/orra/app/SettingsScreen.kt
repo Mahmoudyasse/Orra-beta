@@ -1,60 +1,705 @@
 package com.orra.app
 
-import android.app.Activity
 import android.Manifest
-import android.content.pm.PackageManager
+import android.app.Activity
 import android.app.role.RoleManager
 import android.content.Intent
-import android.os.Build
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+// ============================================================================
+// ORRA settings: Telegram-style hub with one page per section.
+// ============================================================================
+
 @Composable
 fun SettingsScreen() {
+    var route by remember { mutableStateOf("home") }
+    BackHandler(enabled = route != "home") { route = "home" }
+    val back = { route = "home" }
+    when (route) {
+        "account" -> SettingsPage(tr("account"), back) { AccountPage() }
+        "chat" -> SettingsPage(tr("chat_settings"), back) { ChatSettingsPage() }
+        "privacy" -> SettingsPage(tr("privacy_security"), back) { PrivacyPage() }
+        "notifications" -> SettingsPage(tr("notifications"), back) { NotificationsPage() }
+        "data" -> SettingsPage(tr("data_storage"), back) { DataPage() }
+        "folders" -> SettingsPage(tr("folders"), back) { FoldersPage() }
+        "devices" -> SettingsPage(tr("devices"), back) { DevicesPage() }
+        "power" -> SettingsPage(tr("power_saving"), back) { PowerPage() }
+        "language" -> SettingsPage(tr("language"), back) { LanguagePage() }
+        "about" -> SettingsPage(tr("about"), back) { AboutPage() }
+        else -> SettingsHome { route = it }
+    }
+}
+
+@Composable
+private fun SettingsHome(open: (String) -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { OrraPrefs.get(context) }
+    val name = prefs.getString("profile_display_name", "").orEmpty()
+    val username = prefs.getString("profile_username", "").orEmpty().ifBlank { prefs.getString("username", "").orEmpty() }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(start = 16.dp, end = 16.dp, top = 58.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(84.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
+                Text(name.ifBlank { "O" }.first().uppercase(), fontSize = 34.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+            }
+            Text(name.ifBlank { "ORRA" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+            Text(if (username.isNotBlank()) "@$username" else tr("set_username"), style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+        }
+        OrraCard {
+            SettingsRow(Icons.Filled.AccountCircle, Color(0xFF2E9BFF), tr("account"), tr("account_sub")) { open("account") }
+            SettingsRow(Icons.Filled.ChatBubble, Color(0xFFF59E0B), tr("chat_settings"), tr("chat_settings_sub")) { open("chat") }
+            SettingsRow(Icons.Filled.VpnKey, Color(0xFF34C759), tr("privacy_security"), tr("privacy_sub")) { open("privacy") }
+            SettingsRow(Icons.Filled.Notifications, Color(0xFFEF4455), tr("notifications"), tr("notifications_sub")) { open("notifications") }
+            SettingsRow(Icons.Filled.PieChart, Color(0xFF5B6CFF), tr("data_storage"), tr("data_sub")) { open("data") }
+            SettingsRow(Icons.Filled.Folder, Color(0xFF2E9BFF), tr("folders"), tr("folders_sub")) { open("folders") }
+            SettingsRow(Icons.Filled.Laptop, Color(0xFF14B8A6), tr("devices"), tr("devices_sub")) { open("devices") }
+            SettingsRow(Icons.Filled.BatteryChargingFull, Color(0xFFF97316), tr("power_saving"), tr("power_sub")) { open("power") }
+            SettingsRow(Icons.Filled.Language, Color(0xFF9B6BFF), tr("language"), OrraLang.nativeName(OrraLang.code.value, tr("system_language"))) { open("language") }
+        }
+        OrraCard {
+            SettingsRow(Icons.Filled.Share, Color(0xFF2E9BFF), tr("share_app"), tr("share_sub")) { shareOrra(context) }
+            SettingsRow(Icons.Filled.Info, Color(0xFF64748B), tr("about"), "Version " + BuildConfigVersion.name(context)) { open("about") }
+        }
+        OrraDeveloperBadge(Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp, bottom = 8.dp))
+    }
+}
+
+private fun shareOrra(context: android.content.Context) {
+    val intent = Intent(Intent.ACTION_SEND).setType("text/plain")
+        .putExtra(Intent.EXTRA_TEXT, OrraLang.t("share_text") + " https://github.com/Mahmoudyasse/Orra-beta")
+    context.startActivity(Intent.createChooser(intent, OrraLang.t("share_app")))
+}
+
+@Composable
+private fun SettingsPage(title: String, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(top = 54.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("back")) }
+            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 8.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp), content = content
+        )
+    }
+}
+
+@Composable
+private fun OrraCard(content: @Composable ColumnScope.() -> Unit) {
+    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Column(Modifier.padding(vertical = 6.dp), content = content)
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp, top = 4.dp))
+}
+
+@Composable
+private fun Note(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+        modifier = Modifier.padding(horizontal = 6.dp))
+}
+
+@Composable
+private fun SettingsRow(icon: ImageVector, tint: Color, title: String, subtitle: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(tint), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+        }
+        Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
+            Text(title, fontWeight = FontWeight.Medium)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, maxLines = 1, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, subtitle: String? = null, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 10.dp)) {
+            Text(title)
+            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun ChoiceChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    if (selected) Button(onClick = onClick) { Text(label) } else OutlinedButton(onClick = onClick) { Text(label) }
+}
+
+@Composable
+fun OrraDeveloperBadge(modifier: Modifier = Modifier) {
+    val accent = OrraAppearance.accentColor()
+    val shape = RoundedCornerShape(50)
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(tr("developer").uppercase(), fontSize = 10.sp, letterSpacing = 3.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+        Row(
+            Modifier.clip(shape)
+                .background(Brush.linearGradient(listOf(Color(0xFF05060A), Color(0xFF14172A), Color(0xFF07080E))), shape)
+                .border(1.dp, accent.copy(alpha = 0.45f), shape)
+                .padding(horizontal = 22.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(accent))
+            BasicText(
+                "Hamoudy Yasser",
+                style = TextStyle(
+                    brush = Brush.horizontalGradient(listOf(accent, Color.White, accent)),
+                    fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, fontWeight = FontWeight.Light,
+                    fontSize = 21.sp, letterSpacing = 1.6.sp
+                )
+            )
+        }
+    }
+}
+
+// ------------------------------------------------------------------ Chat settings
+
+@Composable
+private fun ChatSettingsPage() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val prefs = remember { OrraPrefs.get(context) }
+    val mode = OrraAppearance.mode.value
+    val accent = OrraAppearance.accent.value
+    var animations by remember { mutableStateOf(prefs.getBoolean("chat_animations", true)) }
+    val wallpaper = remember(OrraWallpaper.version.intValue) { OrraWallpaper.current(context) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) scope.launch { withContext(Dispatchers.IO) { OrraWallpaper.setCustom(context, uri) } }
+    }
+    SectionTitle(tr("appearance"))
+    OrraCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(tr("night_mode"), style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("system" to tr("mode_system"), "dark" to tr("mode_dark"), "light" to tr("mode_light")).forEach { (value, label) ->
+                    ChoiceChip(label, mode == value) { OrraAppearance.setMode(context, value) }
+                }
+            }
+            Text(tr("liquid_accent"), style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("liquid" to Mint, "blue" to Color(0xFF54A8FF), "violet" to Color(0xFF9B8CFF),
+                    "green" to Color(0xFF55E6A5), "rose" to Color(0xFFFF76AE)).forEach { (value, color) ->
+                    val selected = accent == value
+                    Surface(
+                        modifier = Modifier.weight(1f).border(if (selected) 2.dp else 1.dp, if (selected) color else MaterialTheme.colorScheme.outline, RoundedCornerShape(18.dp)),
+                        onClick = { OrraAppearance.setAccent(context, value) },
+                        shape = RoundedCornerShape(18.dp), color = color.copy(alpha = if (selected) 0.28f else 0.12f)
+                    ) { Column(Modifier.padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("●", color = color) } }
+                }
+            }
+            Note(tr("liquid_note"))
+        }
+        SwitchRow(tr("dynamic_island"), tr("dynamic_island_sub"), OrraEye.island.value) { OrraEye.island.value = it; OrraEye.save(context) }
+        SwitchRow(tr("animations"), null, animations) { animations = it; prefs.edit().putBoolean("chat_animations", it).apply() }
+    }
+    SectionTitle(tr("chat_wallpaper"))
+    OrraCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(tr("current") + ": " + tr("wp_" + wallpaper.lowercase()))
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OrraWallpaper.presets.forEach { preset ->
+                    ChoiceChip(tr("wp_" + preset.lowercase()), wallpaper == preset) { OrraWallpaper.setPreset(context, preset) }
+                }
+            }
+            Button(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, modifier = Modifier.fillMaxWidth()) {
+                Text(tr("wallpaper_from_phone"))
+            }
+            Note(tr("wallpaper_note"))
+        }
+    }
+}
+
+// ------------------------------------------------------------------ Privacy & security
+
+@Composable
+private fun PrivacyPage() {
+    val context = LocalContext.current
+    val prefs = remember { OrraPrefs.get(context) }
+    var hideSeen by remember { mutableStateOf(prefs.getBoolean("hide_last_seen", false)) }
+    var chats by remember { mutableStateOf<List<OrraChatConversation>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+    var setFor by remember { mutableStateOf<OrraChatConversation?>(null) }
+    var removeFor by remember { mutableStateOf<OrraChatConversation?>(null) }
+    val lockVersion = OrraLocks.version.intValue
+    LaunchedEffect(Unit) {
+        val client = orraClient(context)
+        if (client == null) status = tr("sign_in_first")
+        else runCatching { chats = withContext(Dispatchers.IO) { client.loadConversations() } }.onFailure { status = tr("load_failed") }
+    }
+    OrraCard { SwitchRow(tr("hide_last_seen"), tr("hide_last_seen_sub"), hideSeen) { hideSeen = it; prefs.edit().putBoolean("hide_last_seen", it).apply() } }
+    SectionTitle(tr("chat_passwords"))
+    Note(tr("chat_passwords_sub"))
+    OrraCard {
+        if (chats.isEmpty()) Text(status.ifBlank { tr("no_chats") }, Modifier.padding(16.dp))
+        chats.forEach { chat ->
+            val locked = lockVersion >= 0 && OrraLocks.isChatLocked(context, chat.id)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(if (locked) Icons.Filled.Lock else Icons.Filled.LockOpen, contentDescription = null,
+                    tint = if (locked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f))
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(chat.username, maxLines = 1)
+                    Text(if (locked) tr("locked") else tr("not_locked"), style = MaterialTheme.typography.bodySmall)
+                }
+                TextButton(onClick = { if (locked) removeFor = chat else setFor = chat }) { Text(if (locked) tr("remove") else tr("set_password")) }
+            }
+        }
+    }
+    setFor?.let { chat ->
+        OrraSetPasswordDialog(chat.username, { setFor = null }) { pw -> OrraLocks.set(context, OrraLocks.chatKey(chat.id), pw); setFor = null }
+    }
+    removeFor?.let { chat ->
+        OrraUnlockDialog(chat.username, OrraLocks.chatKey(chat.id), { removeFor = null }) {
+            OrraLocks.remove(context, OrraLocks.chatKey(chat.id)); removeFor = null
+        }
+    }
+}
+
+// ------------------------------------------------------------------ Notifications
+
+@Composable
+private fun NotificationsPage() {
+    val context = LocalContext.current
+    val prefs = remember { OrraPrefs.get(context) }
+    var messages by remember { mutableStateOf(prefs.getBoolean("message_notifications", true)) }
+    var calls by remember { mutableStateOf(prefs.getBoolean("call_notifications", true)) }
+    var vibration by remember { mutableStateOf(prefs.getBoolean("notification_vibration", true)) }
+    var allowed by remember { mutableStateOf(Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed = it }
+    DisposableEffect(Unit) { onDispose { OrraRinger.stop() } }
+    OrraCard {
+        SwitchRow(tr("message_notifications"), null, messages) { messages = it; prefs.edit().putBoolean("message_notifications", it).apply() }
+        SwitchRow(tr("call_notifications"), null, calls) { calls = it; prefs.edit().putBoolean("call_notifications", it).apply() }
+        SwitchRow(tr("vibration"), null, vibration) { vibration = it; prefs.edit().putBoolean("notification_vibration", it).apply() }
+    }
+    SectionTitle(tr("message_tone"))
+    OrraCard { SoundPicker(call = false) }
+    SectionTitle(tr("call_ringtone"))
+    OrraCard { SoundPicker(call = true) }
+    Note(tr("sound_note"))
+    OrraCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!allowed && Build.VERSION.SDK_INT >= 33) {
+                Button(onClick = { permission.launch(Manifest.permission.POST_NOTIFICATIONS) }, modifier = Modifier.fillMaxWidth()) { Text(tr("allow_notifications")) }
+            }
+            OutlinedButton(onClick = { OrraNotify.show(context, "message", "ORRA", tr("test_body")) }, modifier = Modifier.fillMaxWidth()) { Text(tr("send_test")) }
+            OutlinedButton(onClick = {
+                context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+            }, modifier = Modifier.fillMaxWidth()) { Text(tr("system_notification_settings")) }
+        }
+    }
+}
+
+@Composable
+private fun SoundPicker(call: Boolean) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var selection by remember { mutableStateOf(OrraSounds.selection(context, call)) }
+    var customs by remember { mutableStateOf(OrraSounds.customSounds(context)) }
+    fun choose(value: String) {
+        selection = value
+        OrraSounds.setSelection(context, call, value)
+        OrraRinger.play(context, value, call, false)
+    }
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            val added = withContext(Dispatchers.IO) { OrraSounds.addCustom(context, uri) }
+            if (added != null) { customs = OrraSounds.customSounds(context); choose("custom:" + added.id) }
+        }
+    }
+    val options = buildList<Pair<String, String>> {
+        add(OrraSounds.DEFAULT to tr("sound_default"))
+        add(OrraSounds.SILENT to tr("sound_silent"))
+        (if (call) OrraSounds.ringtones else OrraSounds.notificationTones).forEach { add("builtin:" + it.resName to it.label) }
+        customs.forEach { add("custom:" + it.id to it.name) }
+    }
+    Column(Modifier.padding(vertical = 4.dp)) {
+        options.forEach { (value, label) ->
+            Row(Modifier.fillMaxWidth().clickable { choose(value) }.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = selection == value, onClick = { choose(value) })
+                Text(label, Modifier.weight(1f), maxLines = 1)
+                if (value.startsWith("custom:")) {
+                    TextButton(onClick = {
+                        OrraSounds.removeCustom(context, value.removePrefix("custom:"))
+                        customs = OrraSounds.customSounds(context); selection = OrraSounds.selection(context, call)
+                    }) { Text(tr("remove")) }
+                }
+            }
+        }
+        OutlinedButton(onClick = { pick.launch(arrayOf("audio/*")) }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+            Text(tr("add_sound_from_phone"))
+        }
+    }
+}
+
+// ------------------------------------------------------------------ Data & storage
+
+@Composable
+private fun DataPage() {
+    val context = LocalContext.current
+    var rev by remember { mutableIntStateOf(0) }
+    var wifiOnly by remember { mutableStateOf(OrraDownloads.wifiOnly(context)) }
+    var cleared by remember { mutableStateOf("") }
+    val refresh = rev
+    Note(tr("auto_download_note"))
+    listOf(false, true).forEach { group ->
+        SectionTitle(tr(if (group) "groups" else "private_chats"))
+        OrraCard {
+            OrraDownloads.kinds.forEach { kind ->
+                SwitchRow(tr("media_$kind"), null, refresh >= 0 && OrraDownloads.enabled(context, kind, group)) {
+                    OrraDownloads.setEnabled(context, kind, group, it); rev++
+                }
+            }
+        }
+    }
+    OrraCard {
+        SwitchRow(tr("wifi_only"), tr("wifi_only_sub"), wifiOnly) { wifiOnly = it; OrraPrefs.get(context).edit().putBoolean("dl_wifi_only", it).apply() }
+    }
+    SectionTitle(tr("storage"))
+    OrraCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val cacheKb = runCatching { context.cacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() } / 1024 }.getOrDefault(0L)
+            Text(tr("cache_size") + ": " + cacheKb + " KB", style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(onClick = {
+                val ok = runCatching { context.cacheDir.listFiles()?.forEach { it.deleteRecursively() }; true }.getOrDefault(false)
+                cleared = if (ok) tr("cache_cleared") else tr("cache_failed")
+            }, modifier = Modifier.fillMaxWidth()) { Text(tr("clear_cache")) }
+            if (cleared.isNotBlank()) Text(cleared, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+// ------------------------------------------------------------------ Folders
+
+@Composable
+private fun FoldersPage() {
+    val context = LocalContext.current
+    var chats by remember { mutableStateOf<List<OrraChatConversation>>(emptyList()) }
+    var creating by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<OrraFolder?>(null) }
+    var pendingUnlock by remember { mutableStateOf<Pair<OrraFolder, () -> Unit>?>(null) }
+    val folders = OrraFolders.list(context)
+    LaunchedEffect(Unit) {
+        val client = orraClient(context)
+        if (client != null) runCatching { chats = withContext(Dispatchers.IO) { client.loadConversations() } }
+    }
+    fun guard(folder: OrraFolder, action: () -> Unit) {
+        if (OrraFolders.isLocked(context, folder.id)) pendingUnlock = folder to action else action()
+    }
+    Note(tr("folders_note"))
+    Button(onClick = { creating = true }, modifier = Modifier.fillMaxWidth()) {
+        Icon(Icons.Filled.Add, contentDescription = null); Text("  " + tr("new_folder"))
+    }
+    if (folders.isNotEmpty()) {
+        OrraCard {
+            folders.forEach { folder ->
+                val locked = OrraLocks.has(context, OrraFolders.folderKey(folder.id))
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (locked) Icons.Filled.Lock else Icons.Filled.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                        Text(folder.name, maxLines = 1)
+                        Text(folder.chatIds.size.toString() + " " + tr("chats_count"), style = MaterialTheme.typography.bodySmall)
+                    }
+                    TextButton(onClick = { guard(folder) { editing = folder } }) { Text(tr("edit")) }
+                    TextButton(onClick = { guard(folder) { OrraFolders.delete(context, folder.id) } }) { Text(tr("delete")) }
+                }
+            }
+        }
+    }
+    if (creating || editing != null) {
+        FolderEditorDialog(editing, chats, onDismiss = { creating = false; editing = null }) { name, ids, password, removePassword ->
+            val existing = editing
+            if (existing == null) {
+                OrraFolders.create(context, name, ids, password)
+            } else {
+                OrraFolders.save(context, OrraFolders.list(context).map { if (it.id == existing.id) it.copy(name = name.trim(), chatIds = ids) else it })
+                if (removePassword) OrraLocks.remove(context, OrraFolders.folderKey(existing.id))
+                else if (password.isNotBlank()) OrraLocks.set(context, OrraFolders.folderKey(existing.id), password)
+            }
+            creating = false; editing = null
+        }
+    }
+    pendingUnlock?.let { (folder, action) ->
+        OrraUnlockDialog(folder.name, OrraFolders.folderKey(folder.id), { pendingUnlock = null }) { pendingUnlock = null; action() }
+    }
+}
+
+@Composable
+private fun FolderEditorDialog(
+    existing: OrraFolder?, chats: List<OrraChatConversation>, onDismiss: () -> Unit,
+    onSave: (String, Set<String>, String, Boolean) -> Unit
+) {
+    val context = LocalContext.current
+    var name by remember { mutableStateOf(existing?.name.orEmpty()) }
+    var password by remember { mutableStateOf("") }
+    var removePassword by remember { mutableStateOf(false) }
+    var selected by remember { mutableStateOf(existing?.chatIds ?: emptySet()) }
+    val hasPassword = existing != null && OrraLocks.has(context, OrraFolders.folderKey(existing.id))
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr(if (existing == null) "new_folder" else "edit_folder")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it.take(30) }, singleLine = true, label = { Text(tr("folder_name")) })
+                OutlinedTextField(password, { password = it }, singleLine = true, label = { Text(tr(if (hasPassword) "new_password_keep" else "folder_password_optional")) },
+                    visualTransformation = PasswordVisualTransformation())
+                if (hasPassword) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(removePassword, { removePassword = it }); Text(tr("remove_password"))
+                }
+                Text(tr("choose_chats"), style = MaterialTheme.typography.labelLarge)
+                Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                    if (chats.isEmpty()) Text(tr("no_chats"), style = MaterialTheme.typography.bodySmall)
+                    chats.forEach { chat ->
+                        Row(Modifier.fillMaxWidth().clickable { selected = if (chat.id in selected) selected - chat.id else selected + chat.id },
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(chat.id in selected, { selected = if (it) selected + chat.id else selected - chat.id })
+                            Text(chat.username, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = name.isNotBlank() && (password.isEmpty() || password.length >= 4),
+                onClick = { onSave(name, selected, password, removePassword) }) { Text(tr("save")) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("cancel")) } }
+    )
+}
+
+// ------------------------------------------------------------------ Devices
+
+@Composable
+private fun DevicesPage() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var sessions by remember { mutableStateOf<List<OrraSession>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    val myDevice = remember { OrraDevice.id(context) }
+    fun reload() {
+        scope.launch {
+            busy = true
+            val client = orraClient(context)
+            if (client == null) status = tr("sign_in_first")
+            else {
+                status = ""
+                runCatching { sessions = withContext(Dispatchers.IO) { client.loadSessions() } }.onFailure { status = tr("devices_setup") }
+            }
+            busy = false
+        }
+    }
+    LaunchedEffect(Unit) { reload() }
+    SectionTitle(tr("this_device"))
+    OrraCard {
+        Column(Modifier.padding(16.dp)) {
+            Text(OrraDevice.name(), fontWeight = FontWeight.SemiBold)
+            Text("Android " + Build.VERSION.RELEASE + " · ORRA " + BuildConfigVersion.name(context), style = MaterialTheme.typography.bodySmall)
+            Text(tr("online_now"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+    SectionTitle(tr("active_sessions"))
+    if (status.isNotBlank()) Note(status)
+    val others = sessions.filter { it.deviceId != myDevice }
+    OrraCard {
+        if (others.isEmpty() && status.isBlank()) Text(if (busy) tr("loading") else tr("no_other_sessions"), Modifier.padding(16.dp))
+        others.forEach { session ->
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Laptop, contentDescription = null)
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(session.name, fontWeight = FontWeight.Medium, maxLines = 1)
+                    Text(session.os + " · ORRA " + session.appVersion, style = MaterialTheme.typography.bodySmall)
+                    Text(tr("last_active") + ": " + relativeTime(session.lastActive), style = MaterialTheme.typography.bodySmall)
+                }
+                TextButton(onClick = {
+                    scope.launch {
+                        runCatching { withContext(Dispatchers.IO) { orraClient(context)?.terminateSession(session.id) } }
+                        reload()
+                    }
+                }) { Text(tr("terminate")) }
+            }
+        }
+    }
+    if (others.isNotEmpty()) {
+        OutlinedButton(onClick = {
+            scope.launch {
+                runCatching { withContext(Dispatchers.IO) { orraClient(context)?.terminateOtherSessions(context) } }
+                reload()
+            }
+        }, modifier = Modifier.fillMaxWidth()) { Text(tr("terminate_all_others")) }
+    }
+    Note(tr("sessions_note"))
+}
+
+private fun relativeTime(iso: String): String = runCatching {
+    android.text.format.DateUtils.getRelativeTimeSpanString(java.time.Instant.parse(iso).toEpochMilli(), System.currentTimeMillis(),
+        android.text.format.DateUtils.MINUTE_IN_MILLIS).toString()
+}.getOrDefault(iso)
+
+// ------------------------------------------------------------------ Power saving
+
+@Composable
+private fun PowerPage() {
+    val context = LocalContext.current
+    val prefs = remember { OrraPrefs.get(context) }
+    var power by remember { mutableStateOf(prefs.getBoolean("power_saving", false)) }
+    var auto by remember { mutableStateOf(prefs.getBoolean("power_auto_low", true)) }
+    var rev by remember { mutableIntStateOf(0) }
+    val refresh = rev
+    OrraCard {
+        SwitchRow(tr("power_saving_on"), tr("power_saving_on_sub"), power) { power = it; prefs.edit().putBoolean("power_saving", it).apply(); rev++ }
+        SwitchRow(tr("power_auto_low"), null, auto) { auto = it; prefs.edit().putBoolean("power_auto_low", it).apply(); rev++ }
+    }
+    Note((if (refresh >= 0 && OrraPower.active(context)) tr("power_active") else tr("power_inactive")) + "\n" + tr("power_effects"))
+    SectionTitle(tr("eye_protection"))
+    OrraCard {
+        SwitchRow(tr("eye_protection_on"), tr("eye_protection_sub"), OrraEye.enabled.value) { OrraEye.enabled.value = it; OrraEye.save(context) }
+        Column(Modifier.padding(horizontal = 16.dp)) {
+            Text(tr("eye_intensity"), style = MaterialTheme.typography.labelLarge)
+            Slider(value = OrraEye.level.value, onValueChange = { OrraEye.level.value = it }, onValueChangeFinished = { OrraEye.save(context) })
+        }
+        SwitchRow(tr("eye_auto"), tr("eye_auto_sub"), OrraEye.auto.value) { OrraEye.auto.value = it; OrraEye.save(context) }
+    }
+}
+
+// ------------------------------------------------------------------ Language
+
+@Composable
+private fun LanguagePage() {
+    val context = LocalContext.current
+    OrraCard {
+        OrraLang.languages.forEach { (code, nativeName) ->
+            val label = if (code == "system") tr("system_language") else nativeName
+            Row(Modifier.fillMaxWidth().clickable { OrraLang.set(context, code) }.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = OrraLang.code.value == code, onClick = { OrraLang.set(context, code) })
+                Text(label)
+            }
+        }
+    }
+    Note(tr("language_note"))
+}
+
+// ------------------------------------------------------------------ About
+
+@Composable
+private fun AboutPage() {
+    val context = LocalContext.current
+    OrraCard {
+        Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("ORRA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text("Version " + BuildConfigVersion.name(context))
+            OrraDeveloperBadge(Modifier.padding(vertical = 8.dp))
+            Text(tr("about_text"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+        }
+    }
+    Button(onClick = { shareOrra(context) }, modifier = Modifier.fillMaxWidth()) { Text(tr("share_app")) }
+}
+
+// ============================================================================
+// Account page (profile, cloud backup, proxy, permissions, blocked contacts)
+// ============================================================================
+
+
+@Composable
+fun AccountPage() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = remember { context.getSharedPreferences(SupabaseChatClient.PREFS, android.content.Context.MODE_PRIVATE) }
@@ -82,113 +727,36 @@ fun SettingsScreen() {
     }
     val mode = OrraAppearance.mode.value
     val accent = OrraAppearance.accent.value
+    var showAccountEditor by remember { mutableStateOf(false) }
+    var displayName by remember { mutableStateOf(prefs.getString("profile_display_name", "").orEmpty()) }
+    var username by remember { mutableStateOf(prefs.getString("profile_username", "").orEmpty()) }
+    var bio by remember { mutableStateOf(prefs.getString("profile_bio", "").orEmpty()) }
+    var chatWallpaper by remember { mutableStateOf(prefs.getString("chat_wallpaper", "Default").orEmpty()) }
+    var chatAnimations by remember { mutableStateOf(prefs.getBoolean("chat_animations", true)) }
+    var messageNotifications by remember { mutableStateOf(prefs.getBoolean("message_notifications", true)) }
+    var callNotifications by remember { mutableStateOf(prefs.getBoolean("call_notifications", true)) }
+    var vibrationEnabled by remember { mutableStateOf(prefs.getBoolean("notification_vibration", true)) }
+    var powerSaving by remember { mutableStateOf(prefs.getBoolean("power_saving", false)) }
+    var appLanguage by remember { mutableStateOf(prefs.getString("app_language", "System").orEmpty()) }
+    var showLanguagePicker by remember { mutableStateOf(false) }
+    var showWallpaperPicker by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
+    var storageStatus by remember { mutableStateOf("") }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(start = 18.dp, end = 18.dp, top = 58.dp, bottom = 20.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.Icon(Icons.Default.Palette, contentDescription = null)
-                    Text("  Appearance", fontWeight = FontWeight.SemiBold)
+            Column(Modifier.fillMaxWidth().padding(vertical = 18.dp, horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 4.dp)) {
+                    Text((displayName.ifBlank { "O" }.first()).uppercase(), modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
                 }
-                Text("Display mode", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("system" to "System", "dark" to "Dark", "light" to "Light").forEach { (value, label) ->
-                        if (mode == value) Button(onClick = { OrraAppearance.setMode(context, value) }) { Text(label) }
-                        else OutlinedButton(onClick = { OrraAppearance.setMode(context, value) }) { Text(label) }
-                    }
-                }
-                Text("Liquid accent", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("liquid" to Mint, "blue" to Color(0xFF54A8FF), "violet" to Color(0xFF9B8CFF),
-                        "green" to Color(0xFF55E6A5), "rose" to Color(0xFFFF76AE)).forEach { (value, color) ->
-                        val selected = accent == value
-                        Surface(
-                            modifier = Modifier.weight(1f).background(Color.Transparent, RoundedCornerShape(18.dp))
-                                .border(if (selected) 2.dp else 1.dp, if (selected) color else MaterialTheme.colorScheme.outline,
-                                    RoundedCornerShape(18.dp)),
-                            onClick = { OrraAppearance.setAccent(context, value) },
-                            shape = RoundedCornerShape(18.dp),
-                            color = color.copy(alpha = if (selected) 0.28f else 0.12f)
-                        ) { Column(Modifier.padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("●", color = color)
-                        } }
-                    }
-                }
-                Text("iPhone Island Liquid styling uses subtle translucent surfaces and restrained neon accents.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+                Text(displayName.ifBlank { "ORRA account" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(if (username.isNotBlank()) "@$username" else "Set your username and bio", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                OutlinedButton(onClick = { showAccountEditor = true }) { Text("Edit account") }
             }
         }
-
-        Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Share ORRA", fontWeight = FontWeight.SemiBold)
-                Text("Invite someone to install the ORRA beta app.", style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(onClick = {
-                    val intent = Intent(Intent.ACTION_SEND).setType("text/plain")
-                        .putExtra(Intent.EXTRA_TEXT, "Try ORRA Beta: https://github.com/Mahmoudyasse/Orra-beta")
-                    context.startActivity(Intent.createChooser(intent, "Share ORRA"))
-                }, modifier = Modifier.fillMaxWidth()) { Text("Share app") }
-            }
-        }
-
-        Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.Icon(Icons.Default.Info, contentDescription = null)
-                    Text("  About ORRA", fontWeight = FontWeight.SemiBold)
-                }
-                Text("ORRA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                val developerAccent = OrraAppearance.accentColor()
-                Surface(
-                    modifier = Modifier.border(
-                        1.dp,
-                        developerAccent.copy(alpha = if (mode == "dark") 0.58f else 0.34f),
-                        RoundedCornerShape(50)
-                    ),
-                    shape = RoundedCornerShape(50),
-                    color = developerAccent.copy(alpha = if (mode == "dark") 0.11f else 0.07f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text("●", color = developerAccent, style = MaterialTheme.typography.labelSmall.copy(
-                            shadow = Shadow(
-                                color = developerAccent.copy(alpha = if (mode == "dark") 0.72f else 0.30f),
-                                offset = Offset.Zero,
-                                blurRadius = 10f
-                            )
-                        ))
-                        Text(
-                            "DEVELOPER  /  HAMOUDY YASSER",
-                            fontWeight = FontWeight.SemiBold,
-                            color = developerAccent,
-                            letterSpacing = 1.1.sp,
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                shadow = Shadow(
-                                    color = developerAccent.copy(alpha = if (mode == "dark") 0.48f else 0.18f),
-                                    offset = Offset.Zero,
-                                    blurRadius = 12f
-                                )
-                            )
-                        )
-                    }
-                }
-                Text("Version 0.5.0-beta")
-                Text("Built with Kotlin, Jetpack Compose, Android Telecom and Supabase.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
-                Text("ORRA is an independent beta app and is not affiliated with WhatsApp or Apple.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-            }
-        }
-
-
-
         Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Connection proxy", fontWeight = FontWeight.SemiBold)
@@ -312,6 +880,18 @@ fun SettingsScreen() {
         }
 
 
+
+    }
+
+    if (showAccountEditor) {
+        AlertDialog(onDismissRequest = { showAccountEditor = false }, title = { Text("Edit profile details") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text("Display name") }, singleLine = true)
+                OutlinedTextField(value = username, onValueChange = { username = it.filter { ch -> ch.isLetterOrDigit() || ch == '_' } }, label = { Text("Username") }, singleLine = true)
+                OutlinedTextField(value = bio, onValueChange = { bio = it.take(160) }, label = { Text("Bio") })
+            } },
+            confirmButton = { TextButton(onClick = { prefs.edit().putString("profile_display_name", displayName).putString("profile_username", username).putString("profile_bio", bio).apply(); showAccountEditor = false }) { Text("Save") } },
+            dismissButton = { TextButton(onClick = { showAccountEditor = false }) { Text("Cancel") } })
     }
     if (showBlocked) {
         AlertDialog(

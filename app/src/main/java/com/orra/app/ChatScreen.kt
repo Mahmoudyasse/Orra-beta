@@ -4,6 +4,9 @@ import android.Manifest
 import android.content.ContentProviderOperation
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.media.RingtoneManager
 import android.provider.ContactsContract
 import android.content.Context
 import android.location.Location
@@ -192,6 +195,8 @@ fun ChatScreen() {
     var search by remember { mutableStateOf("") }
     var conversationSearch by remember { mutableStateOf("") }
     var chatSection by remember { mutableStateOf("all") }
+    var lockTarget by remember { mutableStateOf<OrraChatConversation?>(null) }
+    var folderUnlockTarget by remember { mutableStateOf<OrraFolder?>(null) }
     var presenceByUser by remember { mutableStateOf<Map<String, OrraUserPresence>>(emptyMap()) }
     var activePeerPresence by remember { mutableStateOf<OrraUserPresence?>(null) }
     var dndEnabled by remember { mutableStateOf(prefs.getBoolean("orra_dnd_enabled", false)) }
@@ -206,6 +211,9 @@ fun ChatScreen() {
     var selectedUsers by remember { mutableStateOf(setOf<String>()) }
     var conversations by remember { mutableStateOf<List<OrraChatConversation>>(emptyList()) }
     var messages by remember { mutableStateOf<List<OrraChatMessage>>(emptyList()) }
+    var demoMode by remember { mutableStateOf(false) }
+    var demoNotificationsGranted by remember { mutableStateOf(Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) }
+    val demoNotificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { demoNotificationsGranted = it }
     var selected by remember { mutableStateOf<OrraChatConversation?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
@@ -474,7 +482,7 @@ fun ChatScreen() {
                         }
                     }
                 } catch (e: Exception) { android.util.Log.w("ORRA", "Chat refresh failed", e) }
-                delay(3500)
+                delay(OrraPower.pollDelay(context, 3500))
             }
         }
     }
@@ -482,8 +490,8 @@ fun ChatScreen() {
     LaunchedEffect(token, client, dndEnabled) {
         if (signedIn && client != null) {
             while (true) {
-                runCatching { withContext(Dispatchers.IO) { client.updatePresence(true, dndEnabled, false, null) } }
-                delay(12000)
+                runCatching { withContext(Dispatchers.IO) { client.updatePresence(OrraPrivacy.shareOnline(context), dndEnabled, false, null) } }
+                delay(OrraPower.pollDelay(context, 12000))
             }
         }
     }
@@ -492,11 +500,11 @@ fun ChatScreen() {
         if (signedIn && client != null && selected != null && messageText.isNotBlank()) {
             delay(550)
             runCatching {
-                withContext(Dispatchers.IO) { client.updatePresence(true, dndEnabled, true, selected!!.id) }
+                withContext(Dispatchers.IO) { client.updatePresence(OrraPrivacy.shareOnline(context), dndEnabled, true, selected!!.id) }
             }
             delay(2600)
             runCatching {
-                withContext(Dispatchers.IO) { client.updatePresence(true, dndEnabled, false, null) }
+                withContext(Dispatchers.IO) { client.updatePresence(OrraPrivacy.shareOnline(context), dndEnabled, false, null) }
             }
         }
     }
@@ -508,7 +516,7 @@ fun ChatScreen() {
                 activePeerPresence = runCatching {
                     withContext(Dispatchers.IO) { client.loadPresence(listOf(peer))[peer] }
                 }.getOrNull()
-                delay(5000)
+                delay(OrraPower.pollDelay(context, 5000))
             }
         } else activePeerPresence = null
     }
@@ -581,7 +589,8 @@ fun ChatScreen() {
         else -> MaterialTheme.colorScheme.background
     }
 
-    val chatSurface = if (selected != null && chatTheme == "liquid") {
+    val wallpaperModifier = if (selected != null && chatTheme == "liquid") rememberOrraWallpaperModifier() else null
+    val chatSurface = if (wallpaperModifier != null) wallpaperModifier else if (selected != null && chatTheme == "liquid") {
         Modifier.background(Brush.linearGradient(listOf(
             Color(0xFF0B111A), Color(0xFF17152B), Color(0xFF101C26)
         )))
@@ -589,13 +598,59 @@ fun ChatScreen() {
         Modifier.background(if (selected != null) chatBackground else MaterialTheme.colorScheme.background)
     }
 
+    lockTarget?.let { target ->
+        OrraUnlockDialog(target.username, OrraLocks.chatKey(target.id), { lockTarget = null }) {
+            selected = target; messages = emptyList(); lockTarget = null
+        }
+    }
+    folderUnlockTarget?.let { folder ->
+        OrraUnlockDialog(folder.name, OrraFolders.folderKey(folder.id), { folderUnlockTarget = null }) {
+            chatSection = "folder:" + folder.id; folderUnlockTarget = null
+        }
+    }
+
     Column(
         Modifier.fillMaxSize().then(chatSurface)
             .padding(start = 16.dp, end = 16.dp, top = 58.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        if (!configured) {
-            Text("Connect ORRA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        if (demoMode || !configured) {
+            Text("ORRA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Surface(Modifier.fillMaxWidth().clickable { demoMode = true; selected = OrraChatConversation("demo-local", "Demo Contact", "Local demo chat", peerUserId = "demo-peer"); messages = emptyList() }, shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Person, null); Column(Modifier.weight(1f).padding(start = 12.dp)) { Text("Demo Contact", fontWeight = FontWeight.SemiBold); Text("Try sending a message without signing in", style = MaterialTheme.typography.bodySmall) }; Icon(Icons.Default.Send, null) }
+            }
+            if (demoMode && selected?.id == "demo-local") {
+                Text("Demo chat is active. Replies are simulated on this device.", style = MaterialTheme.typography.bodySmall)
+            } else Text("Connect your account for real conversations.")
+            if (!demoMode) {
+                Text("Connect ORRA to use real accounts and synchronized messaging.")
+            }
+            if (demoMode && selected?.id == "demo-local") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { selected = null; demoMode = false }) { Icon(Icons.Default.ArrowBack, "Back") }
+                    Text("Demo Contact", fontWeight = FontWeight.Bold)
+                }
+                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(messages) { m -> Text((if (m.senderId == "demo-me") "You: " else "Demo Contact: ") + m.body, modifier = Modifier.fillMaxWidth().padding(8.dp)) } }
+                if (!demoNotificationsGranted) OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { if (Build.VERSION.SDK_INT >= 33) demoNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else demoNotificationsGranted = true }) { Text("Enable notification sound") }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(messageText, { messageText = it }, Modifier.weight(1f), placeholder = { Text("Message Demo Contact") })
+                    IconButton(enabled = messageText.isNotBlank(), onClick = {
+                        val body = messageText.trim(); messageText = ""
+                        val sent = OrraChatMessage("demo-" + System.currentTimeMillis(), "demo-me", body, Instant.now().toString())
+                        messages = messages + sent
+                        scope.launch {
+                            delay(1000)
+                            val reply = OrraChatMessage("demo-" + System.currentTimeMillis(), "demo-peer", "وصلت رسالتك: " + body.take(60) + " ✅ دي رسالة رد تجريبية.", Instant.now().toString())
+                            messages = messages + reply
+                            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return@launch
+                            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                            if (Build.VERSION.SDK_INT >= 26 && manager.getNotificationChannel("orra-demo") == null) manager.createNotificationChannel(NotificationChannel("orra-demo", "ORRA demo messages", NotificationManager.IMPORTANCE_HIGH).apply { setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), null) })
+                            val builder = if (Build.VERSION.SDK_INT >= 26) android.app.Notification.Builder(context, "orra-demo") else android.app.Notification.Builder(context)
+                            manager.notify(991, builder.setSmallIcon(android.R.drawable.sym_action_chat).setContentTitle("ORRA Demo Contact").setContentText(reply.body).setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)).build())
+                        }
+                    }) { Icon(Icons.Default.Send, "Send") }
+                }
+            }
             Text("Connect your Supabase project to use real ORRA accounts and synchronized messaging.")
             OutlinedTextField(projectUrl, { projectUrl = it }, Modifier.fillMaxWidth(), label = { Text("Project URL") }, singleLine = true)
             OutlinedTextField(publishableKey, { publishableKey = it }, Modifier.fillMaxWidth(), label = { Text("Publishable key") }, singleLine = true)
@@ -770,6 +825,14 @@ fun ChatScreen() {
                     if (chatSection == key) Button(onClick = { chatSection = key }) { Text(label) }
                     else OutlinedButton(onClick = { chatSection = key }) { Text(label) }
                 }
+                OrraFolders.list(context).forEach { folder ->
+                    val folderKey = "folder:" + folder.id
+                    val open = {
+                        if (OrraFolders.isLocked(context, folder.id)) folderUnlockTarget = folder else chatSection = folderKey
+                    }
+                    if (chatSection == folderKey) Button(onClick = { open() }) { Text(folder.name) }
+                    else OutlinedButton(onClick = { open() }) { Text(folder.name) }
+                }
             }
             if (users.isNotEmpty()) {
                 Text("People", fontWeight = FontWeight.SemiBold)
@@ -816,15 +879,19 @@ fun ChatScreen() {
                 // Keep the conversation area clean when there are no chats yet.
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val hiddenByFolderLock = OrraFolders.hiddenChatIds(context)
                     items(conversations.filter { conversation ->
-                        (chatSection == "all" || (chatSection == "groups" && conversation.isGroup) ||
-                            (chatSection == "direct" && !conversation.isGroup)) &&
+                        ((chatSection == "all" || (chatSection == "groups" && conversation.isGroup) ||
+                            (chatSection == "direct" && !conversation.isGroup)) && conversation.id !in hiddenByFolderLock ||
+                            (chatSection.startsWith("folder:") && OrraFolders.list(context).any {
+                                it.id == chatSection.removePrefix("folder:") && conversation.id in it.chatIds
+                            })) &&
                             (conversationSearch.isBlank() || conversation.username.contains(conversationSearch, ignoreCase = true) ||
                                 conversation.lastMessage.contains(conversationSearch, ignoreCase = true))
                     }, key = { it.id }) { conversation ->
                         Surface(Modifier.fillMaxWidth().clickable {
-                            selected = conversation
-                            messages = emptyList()
+                            if (OrraLocks.isChatLocked(context, conversation.id)) lockTarget = conversation
+                            else { selected = conversation; messages = emptyList() }
                         }, shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                             Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
@@ -952,6 +1019,10 @@ fun ChatScreen() {
                                     Text("@${message.senderUsername}", style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                                 }
+                                OrraMediaGate(
+                                    when (message.type) { "image" -> "image"; "audio" -> "audio"; "video" -> "video"; "file" -> "file"; else -> "" },
+                                    message.id, selected!!.isGroup
+                                ) {
                                 when (message.type) {
                                     "image" -> if (!message.mediaUrl.isNullOrBlank()) {
                                         AsyncImage(message.mediaUrl, contentDescription = "Shared image",
@@ -999,6 +1070,7 @@ fun ChatScreen() {
                                     }
                                     else -> Text(message.body)
                                 }
+                                }
                                 if (message.editedAt != null) Text("Edited", style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(formatChatTimestamp(message.createdAt),
@@ -1020,7 +1092,6 @@ fun ChatScreen() {
                     }
                 }
             }
-                color = MaterialTheme.colorScheme.primary)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (!selected!!.isAi) {
                     IconButton(onClick = { showAttachmentMenu = true }, enabled = !busy) {
@@ -1164,8 +1235,7 @@ fun ChatScreen() {
                         }) { Text("Confirm phone number") }
                         TextButton(onClick = { phoneOtpPending = false; phoneOtpCode = "" }) { Text("Cancel verification") }
                     }
-                        color = MaterialTheme.colorScheme.primary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { avatarPicker.launch("image/*") }) { Icon(Icons.Default.Person, null); Text(" Photo") }
                         OutlinedButton(onClick = { coverPicker.launch("image/*") }) { Icon(Icons.Default.Photo, null); Text(" Cover") }
                     }

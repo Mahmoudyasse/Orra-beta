@@ -91,3 +91,13 @@ This repository does not contain `google-services.json` or Firebase service-acco
 - Repeat calls with the app backgrounded after FCM is configured.
 - Test SIM 1/SIM 2 and incoming cellular calls on a physical dual-SIM device.
 - Deny each runtime permission once and verify the app explains the missing permission without crashing.
+
+
+## v11: device sessions and push notifications
+
+1. Run `supabase/orra_sessions_push_v11.sql` in the Supabase SQL Editor (Devices screen + push tokens).
+2. Firebase: create a project, add an Android app with package `com.orra.beta`, download `google-services.json` into `app/`, commit it. Without this file the app builds normally and push stays off.
+3. Firebase console > Project settings > Service accounts > Generate new private key.
+4. Deploy the Edge Function: `supabase functions deploy orra-push-send --no-verify-jwt`
+5. Set secrets: `supabase secrets set FCM_SERVICE_ACCOUNT='<the whole JSON>' ORRA_PUSH_SECRET='<long random string>'`
+6. Supabase Dashboard > Database > Webhooks: create two webhooks (INSERT on `public.messages`, INSERT on `public.orra_call_sessions`), both POST to `https://<project-ref>.supabase.co/functions/v1/orra-push-send` with header `x-orra-push-secret: <same random string>`.

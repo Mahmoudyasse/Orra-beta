@@ -3,6 +3,11 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Push is only active once app/google-services.json exists (see ORRA_BACKEND_SETUP.md).
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.orra.app"
     compileSdk = 34
@@ -44,5 +49,7 @@ dependencies {
     implementation("androidx.camera:camera-view:1.3.4")
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
+    implementation("com.google.firebase:firebase-messaging")
     implementation("io.github.webrtc-sdk:android:150.7871.04")
 }
