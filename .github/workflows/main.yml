@@ -6,11 +6,27 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Apply update zip (if present)
+        run: |
+          if [ -f Orra-beta-settings-update.zip ]; then
+            rm -rf /tmp/up && mkdir /tmp/up
+            unzip -o Orra-beta-settings-update.zip -d /tmp/up
+            rm -rf /tmp/up/*/.github
+            cp -r /tmp/up/*/. .
+            rm Orra-beta-settings-update.zip
+            git config user.name "github-actions"
+            git config user.email "actions@github.com"
+            git add -A
+            git commit -m "Apply ORRA settings update" || true
+            git push || true
+          fi
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
