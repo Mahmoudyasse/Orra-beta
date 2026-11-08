@@ -138,11 +138,11 @@ fun InCallScreen() {
                     })
                 }
             }
-            Text("Carrier video calling availability depends on both SIMs, network and device support.",
+            Text(tr("s_30652b3f"),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (videoMessage.isNotBlank()) Text(videoMessage, color = MaterialTheme.colorScheme.error)
         } else if (videoActive) {
-            Text("This carrier or device did not provide an in-call video surface.",
+            Text(tr("s_bfe3fbff"),
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
 
@@ -155,7 +155,7 @@ fun InCallScreen() {
                             VideoProfile.STATE_BIDIRECTIONAL else VideoProfile.STATE_AUDIO_ONLY
                         call.answer(answerState)
                     }) { Text(if (OrraCallState.videoState != VideoProfile.STATE_AUDIO_ONLY) "Answer video" else "Answer") }
-                    Button(onClick = { call.disconnect() }) { Text("Decline") }
+                    Button(onClick = { call.disconnect() }) { Text(tr("s_0d362728")) }
                 }
             } else {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -174,19 +174,19 @@ fun InCallScreen() {
                     OutlinedButton(modifier = Modifier.weight(1f), onClick = { showKeypad = !showKeypad }) {
                         Text(if (showKeypad) "Hide keypad" else "Keypad")
                     }
-                    Button(modifier = Modifier.weight(1f), onClick = { call.disconnect() }) { Text("End") }
+                    Button(modifier = Modifier.weight(1f), onClick = { call.disconnect() }) { Text(tr("s_87557f11")) }
                 }
                 if (!videoActive && videoCall != null) {
                     OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
                         runCatching { videoCall.sendSessionModifyRequest(VideoProfile(VideoProfile.STATE_BIDIRECTIONAL)) }
                             .onFailure { videoMessage = "The carrier rejected the video upgrade." }
-                    }) { Text("Upgrade to video") }
+                    }) { Text(tr("s_ae5f3b42")) }
                 }
                 if (videoActive) {
                     OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
                         frontCamera = !frontCamera
                         setCallCamera(frontCamera)
-                    }) { Text("Switch camera") }
+                    }) { Text(tr("s_5544638c")) }
                 }
                 if (showKeypad) {
                     Spacer(Modifier.height(12.dp))
@@ -202,6 +202,6 @@ fun InCallScreen() {
                     }
                 }
             }
-        } else Text("No active call")
+        } else Text(tr("s_e87e8160"))
     }
 }

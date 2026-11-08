@@ -80,14 +80,14 @@ fun VoiceIsolationScreen() {
 
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 58.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Voice Studio", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Voice processing is enabled automatically when recording, when the device exposes the Android audio effects.",
+        Text(tr("s_e85ac023"), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text(tr("s_36a3f1ba"),
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Mic, contentDescription = null)
-                    Text("  ORRA voice recorder", fontWeight = FontWeight.SemiBold)
+                    Text("  " + tr("s_28e9b5b2"), fontWeight = FontWeight.SemiBold)
                 }
                 Text(if (recorder.noiseSuppressionAvailable()) "Noise suppression is supported by this device."
                     else "Noise suppression is not reported as available by Android on this device.",
@@ -95,23 +95,23 @@ fun VoiceIsolationScreen() {
                 Text(status, color = MaterialTheme.colorScheme.primary)
                 if (recording) {
                     Button(onClick = { recorder.stop(); status = "Finishing recording…" }, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Default.Stop, contentDescription = null); Text("  Stop recording")
+                        Icon(Icons.Default.Stop, contentDescription = null); Text("  " + tr("s_54493c61"))
                     }
                 } else {
                     Button(onClick = { if (hasPermission) beginRecording() else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
                         modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Default.Mic, contentDescription = null); Text("  Start processed recording")
+                        Icon(Icons.Default.Mic, contentDescription = null); Text("  " + tr("s_0368bafe"))
                     }
                 }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("My recordings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(tr("s_e1fba67e"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.weight(1f))
             Text("${recordings.size} saved", style = MaterialTheme.typography.labelSmall)
         }
         if (recordings.isEmpty()) {
-            Text("Your saved voice recordings will appear here.")
+            Text(tr("s_5b1e3738"))
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(recordings, key = { it.absolutePath }) { file ->
@@ -149,7 +149,7 @@ fun VoiceIsolationScreen() {
             }
         }
         Spacer(Modifier.height(2.dp))
-        Text("Recordings stay in ORRA's private app storage. Processing quality depends on the phone's supported audio effects. This does not modify microphone audio in other apps or cellular calls.",
+        Text(tr("s_c0d71fde"),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

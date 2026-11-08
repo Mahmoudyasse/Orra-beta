@@ -144,7 +144,7 @@ fun ContactsScreen() {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Contacts", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text(tr("s_9aa698f6"), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 Text(
                     if (hasReadPermission) "${contacts.size} contacts found" else "Connect your phone contacts",
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
@@ -163,13 +163,13 @@ fun ContactsScreen() {
                 Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(34.dp))
-                    Text("Allow ORRA to access contacts")
-                    Text("Contacts are read from your phone and remain in your device account.",
+                    Text(tr("s_dcc72656"))
+                    Text(tr("s_c5594b35"),
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
                     Button(onClick = { permissionLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)) }) {
-                        Text("Allow access")
+                        Text(tr("s_db8e6e84"))
                     }
-                    if (permissionDenied) Text("Enable Contacts permissions from Android App permissions if the prompt no longer appears.")
+                    if (permissionDenied) Text(tr("s_3ae93c66"))
                 }
             }
         } else {
@@ -178,9 +178,9 @@ fun ContactsScreen() {
                 TextButton(onClick = { showFavorites = true }) { Text(if (showFavorites) "• Favorites" else "Favorites") }
             }
             OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(),
-                singleLine = true, label = { Text("Search contacts") })
+                singleLine = true, label = { Text(tr("s_94b85fca")) })
             when {
-                loading -> Text("Loading contacts…")
+                loading -> Text(tr("s_4e0e1322"))
                 filteredContacts.isEmpty() -> Text(if (showFavorites) "No favorite contacts yet." else "No matching contacts.")
                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(filteredContacts, key = { "${it.contactId}-${it.number}" }) { contact ->
@@ -222,7 +222,7 @@ fun ContactsScreen() {
     if (deletingContact != null) {
         AlertDialog(
             onDismissRequest = { if (!deleting) deletingContact = null },
-            title = { Text("Delete contact?") },
+            title = { Text(tr("s_bc9acbcb")) },
             text = { Text("Delete ${deletingContact?.name} from the phone contacts stored on this device? This cannot be undone.") },
             confirmButton = {
                 TextButton(enabled = !deleting, onClick = {
@@ -235,7 +235,7 @@ fun ContactsScreen() {
                 }) { Text(if (deleting) "Deleting…" else "Delete") }
             },
             dismissButton = {
-                OutlinedButton(enabled = !deleting, onClick = { deletingContact = null }) { Text("Cancel") }
+                OutlinedButton(enabled = !deleting, onClick = { deletingContact = null }) { Text(tr("s_ea478870")) }
             }
         )
         LaunchedEffect(deleting) {
@@ -263,9 +263,9 @@ fun ContactsScreen() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(value = editorName, onValueChange = { editorName = it },
-                        label = { Text("Name") }, singleLine = true)
+                        label = { Text(tr("s_49ee3087")) }, singleLine = true)
                     OutlinedTextField(value = editorNumber, onValueChange = { editorNumber = it },
-                        label = { Text("Phone number") }, singleLine = true)
+                        label = { Text(tr("s_1f8261d1")) }, singleLine = true)
                     editorError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
@@ -281,7 +281,7 @@ fun ContactsScreen() {
                     }
                 }) { Text(if (saving) "Saving…" else "Save") }
             },
-            dismissButton = { OutlinedButton(enabled = !saving, onClick = { showEditor = false }) { Text("Cancel") } }
+            dismissButton = { OutlinedButton(enabled = !saving, onClick = { showEditor = false }) { Text(tr("s_ea478870")) } }
         )
         LaunchedEffect(saving) {
             if (saving) {

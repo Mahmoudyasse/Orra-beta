@@ -1,5 +1,16 @@
 package com.orra.app
 
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Wallpaper
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import android.Manifest
 import android.content.ContentProviderOperation
 import android.content.Intent
@@ -197,6 +208,17 @@ fun ChatScreen() {
     var chatSection by remember { mutableStateOf("all") }
     var lockTarget by remember { mutableStateOf<OrraChatConversation?>(null) }
     var folderUnlockTarget by remember { mutableStateOf<OrraFolder?>(null) }
+    var showListMenu by remember { mutableStateOf(false) }
+    var showFind by remember { mutableStateOf(false) }
+    var showEmoji by remember { mutableStateOf(false) }
+    var showWallpaper by remember { mutableStateOf(false) }
+    var showPeerProfile by remember { mutableStateOf(false) }
+    var confirmDeleteChat by remember { mutableStateOf(false) }
+    var viewLimit by remember { mutableIntStateOf(0) }
+    var viewerImage by remember { mutableStateOf<String?>(null) }
+    val expiredViews = remember { mutableStateListOf<String>() }
+    var lastSeenId by remember { mutableStateOf<String?>(null) }
+    var cameraFile by remember { mutableStateOf<File?>(null) }
     var presenceByUser by remember { mutableStateOf<Map<String, OrraUserPresence>>(emptyMap()) }
     var activePeerPresence by remember { mutableStateOf<OrraUserPresence?>(null) }
     var dndEnabled by remember { mutableStateOf(prefs.getBoolean("orra_dnd_enabled", false)) }
@@ -265,7 +287,7 @@ fun ChatScreen() {
         scope.launch {
             busy = true
             error = ""
-            try { task() } catch (e: Exception) { android.util.Log.w("ORRA", "Background operation failed", e) }
+            try { task() } catch (e: Exception) { android.util.Log.w("ORRA", "Background operation failed", e); error = e.message.orEmpty() }
             finally { busy = false }
         }
     }
@@ -329,6 +351,7 @@ fun ChatScreen() {
         if (uri != null && active != null && client != null) runTask {
             val file = withContext(Dispatchers.IO) { copyUriToCache(context, uri) }
             try {
+                if (OrraMedia.isDangerous(file.name)) throw IllegalStateException(tr("unsafe_file"))
                 require(file.length() <= 100L * 1024L * 1024L) { "Files larger than 100 MB are not supported yet." }
                 val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
                 val type = if (mime.startsWith("image/")) "image" else "file"
@@ -341,11 +364,55 @@ fun ChatScreen() {
             } finally { file.delete() }
         }
     }
+    val galleryPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris ->
+        val active = selected
+        if (uris.isNotEmpty() && active != null && client != null) runTask {
+            for (uri in uris) {
+                val file = withContext(Dispatchers.IO) { copyUriToCache(context, uri) }
+                try {
+                    if (OrraMedia.isDangerous(file.name)) throw IllegalStateException(tr("unsafe_file"))
+                    require(file.length() <= 100L * 1024L * 1024L) { "Files larger than 100 MB are not supported yet." }
+                    val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+                    val type = if (mime.startsWith("video/")) "video" else "image"
+                    val path = withContext(Dispatchers.IO) {
+                        client.uploadMedia("orra-chat-media", file, "$userId/${active.id}/${System.currentTimeMillis()}_${file.name}", mime)
+                    }
+                    withContext(Dispatchers.IO) { client.sendAttachment(active.id, OrraMedia.viewPrefix(viewLimit) + type, type, path) }
+                } finally { file.delete() }
+            }
+            messages = withContext(Dispatchers.IO) { client.loadMessages(active.id) }
+            OrraSfx.play(context, "send")
+        }
+    }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
+        val active = selected
+        val photo = cameraFile
+        if (taken && photo != null && active != null && client != null) runTask {
+            try {
+                val path = withContext(Dispatchers.IO) {
+                    client.uploadMedia("orra-chat-media", photo, "$userId/${active.id}/${System.currentTimeMillis()}_camera.jpg", "image/jpeg")
+                }
+                withContext(Dispatchers.IO) { client.sendAttachment(active.id, OrraMedia.viewPrefix(viewLimit) + "image", "image", path) }
+                messages = withContext(Dispatchers.IO) { client.loadMessages(active.id) }
+                OrraSfx.play(context, "send")
+            } finally { photo.delete() }
+        } else photo?.delete()
+    }
+    fun launchCamera() {
+        val dir = File(context.cacheDir, "camera").also { it.mkdirs() }
+        val photo = File(dir, "orra_" + System.currentTimeMillis() + ".jpg")
+        cameraFile = photo
+        cameraLauncher.launch(androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".orrafiles", photo))
+    }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) launchCamera() else error = tr("camera_denied")
+    }
     val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val active = selected
         if (uri != null && active != null && client != null) runTask {
             val file = withContext(Dispatchers.IO) { copyUriToCache(context, uri) }
             try {
+                if (OrraMedia.isDangerous(file.name)) throw IllegalStateException(tr("unsafe_file"))
                 require(file.length() <= 20L * 1024L * 1024L) { "Files larger than 20 MB are not supported yet." }
                 val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
                 val type = when {
@@ -582,7 +649,7 @@ fun ChatScreen() {
     }
 
     val chatBackground = when (chatTheme) {
-        "dark" -> Color(0xFF080A12)
+        "dark" -> Color(0xFF050505)
         "ocean" -> Color(0xFF0B1C2A)
         "violet" -> Color(0xFF17112A)
         "rose" -> Color(0xFF24121E)
@@ -592,12 +659,22 @@ fun ChatScreen() {
     val wallpaperModifier = if (selected != null && chatTheme == "liquid") rememberOrraWallpaperModifier() else null
     val chatSurface = if (wallpaperModifier != null) wallpaperModifier else if (selected != null && chatTheme == "liquid") {
         Modifier.background(Brush.linearGradient(listOf(
-            Color(0xFF0B111A), Color(0xFF17152B), Color(0xFF101C26)
+            Color(0xFF000000), Color(0xFF0A0A0F), Color(0xFF050809)
         )))
     } else {
         Modifier.background(if (selected != null) chatBackground else MaterialTheme.colorScheme.background)
     }
 
+    LaunchedEffect(selected?.id) { lastSeenId = null }
+    LaunchedEffect(messages) {
+        val last = messages.lastOrNull()
+        if (last != null && lastSeenId != null && last.id != lastSeenId && last.senderId != userId) OrraSfx.play(context, "receive")
+        lastSeenId = last?.id
+    }
+    val clearedAt = if (selected != null) prefs.getLong("chat_cleared_" + selected!!.id, 0L) else 0L
+    val visibleMessages = if (clearedAt > 0L) messages.filter {
+        runCatching { java.time.OffsetDateTime.parse(it.createdAt).toInstant().toEpochMilli() > clearedAt }.getOrDefault(true)
+    } else messages
     lockTarget?.let { target ->
         OrraUnlockDialog(target.username, OrraLocks.chatKey(target.id), { lockTarget = null }) {
             selected = target; messages = emptyList(); lockTarget = null
@@ -617,13 +694,13 @@ fun ChatScreen() {
         if (demoMode || !configured) {
             Text("ORRA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Surface(Modifier.fillMaxWidth().clickable { demoMode = true; selected = OrraChatConversation("demo-local", "Demo Contact", "Local demo chat", peerUserId = "demo-peer"); messages = emptyList() }, shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Person, null); Column(Modifier.weight(1f).padding(start = 12.dp)) { Text("Demo Contact", fontWeight = FontWeight.SemiBold); Text("Try sending a message without signing in", style = MaterialTheme.typography.bodySmall) }; Icon(Icons.Default.Send, null) }
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Person, null); Column(Modifier.weight(1f).padding(start = 12.dp)) { Text("Demo Contact", fontWeight = FontWeight.SemiBold); Text(tr("s_99a25b80"), style = MaterialTheme.typography.bodySmall) }; Icon(Icons.Default.Send, null) }
             }
             if (demoMode && selected?.id == "demo-local") {
-                Text("Demo chat is active. Replies are simulated on this device.", style = MaterialTheme.typography.bodySmall)
-            } else Text("Connect your account for real conversations.")
+                Text(tr("s_3f26b24d"), style = MaterialTheme.typography.bodySmall)
+            } else Text(tr("s_22279d96"))
             if (!demoMode) {
-                Text("Connect ORRA to use real accounts and synchronized messaging.")
+                Text(tr("s_d84b40a2"))
             }
             if (demoMode && selected?.id == "demo-local") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -631,9 +708,9 @@ fun ChatScreen() {
                     Text("Demo Contact", fontWeight = FontWeight.Bold)
                 }
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(messages) { m -> Text((if (m.senderId == "demo-me") "You: " else "Demo Contact: ") + m.body, modifier = Modifier.fillMaxWidth().padding(8.dp)) } }
-                if (!demoNotificationsGranted) OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { if (Build.VERSION.SDK_INT >= 33) demoNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else demoNotificationsGranted = true }) { Text("Enable notification sound") }
+                if (!demoNotificationsGranted) OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { if (Build.VERSION.SDK_INT >= 33) demoNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else demoNotificationsGranted = true }) { Text(tr("s_93c72c4a")) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(messageText, { messageText = it }, Modifier.weight(1f), placeholder = { Text("Message Demo Contact") })
+                    OutlinedTextField(messageText, { messageText = it }, Modifier.weight(1f), placeholder = { Text(tr("s_b0b519e2")) })
                     IconButton(enabled = messageText.isNotBlank(), onClick = {
                         val body = messageText.trim(); messageText = ""
                         val sent = OrraChatMessage("demo-" + System.currentTimeMillis(), "demo-me", body, Instant.now().toString())
@@ -651,29 +728,29 @@ fun ChatScreen() {
                     }) { Icon(Icons.Default.Send, "Send") }
                 }
             }
-            Text("Connect your Supabase project to use real ORRA accounts and synchronized messaging.")
-            OutlinedTextField(projectUrl, { projectUrl = it }, Modifier.fillMaxWidth(), label = { Text("Project URL") }, singleLine = true)
-            OutlinedTextField(publishableKey, { publishableKey = it }, Modifier.fillMaxWidth(), label = { Text("Publishable key") }, singleLine = true)
+            Text(tr("s_24f351fe"))
+            OutlinedTextField(projectUrl, { projectUrl = it }, Modifier.fillMaxWidth(), label = { Text(tr("s_9bc13a6d")) }, singleLine = true)
+            OutlinedTextField(publishableKey, { publishableKey = it }, Modifier.fillMaxWidth(), label = { Text(tr("s_30ca9973")) }, singleLine = true)
             Button(onClick = {
                 if (projectUrl.startsWith("https://") && publishableKey.isNotBlank()) {
                     SupabaseChatClient.saveConfig(context, projectUrl, publishableKey)
                     error = "Server settings saved. Reopen Chats to connect."
                 } else error = "Enter a valid HTTPS URL and publishable key."
-            }, modifier = Modifier.fillMaxWidth()) { Text("Save server connection") }
+            }, modifier = Modifier.fillMaxWidth()) { Text(tr("s_3c0838cd")) }
         } else if (!signedIn) {
             Text("ORRA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text("Choose how to access your ORRA account.")
+            Text(tr("s_90ef781a"))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (authMethod == "email") Button(onClick = { authMethod = "email"; phoneOtpSent = false; error = "" }) { Text("Email") }
-                else OutlinedButton(onClick = { authMethod = "email"; error = "" }) { Text("Email") }
-                if (authMethod == "phone") Button(onClick = { authMethod = "phone"; error = "" }) { Text("Phone / SIM") }
-                else OutlinedButton(onClick = { authMethod = "phone"; error = "" }) { Text("Phone / SIM") }
+                if (authMethod == "email") Button(onClick = { authMethod = "email"; phoneOtpSent = false; error = "" }) { Text(tr("s_ce8ae9da")) }
+                else OutlinedButton(onClick = { authMethod = "email"; error = "" }) { Text(tr("s_ce8ae9da")) }
+                if (authMethod == "phone") Button(onClick = { authMethod = "phone"; error = "" }) { Text(tr("s_8b0576ef")) }
+                else OutlinedButton(onClick = { authMethod = "phone"; error = "" }) { Text(tr("s_8b0576ef")) }
             }
             if (authMethod == "email") {
                 Text(if (isSignUp) "Create your account" else "Sign in")
-                if (isSignUp) OutlinedTextField(requestedUsername, { requestedUsername = it }, Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true)
-                OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email") }, singleLine = true)
-                OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+                if (isSignUp) OutlinedTextField(requestedUsername, { requestedUsername = it }, Modifier.fillMaxWidth(), label = { Text(tr("s_f6039d44")) }, singleLine = true)
+                OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text(tr("s_ce8ae9da")) }, singleLine = true)
+                OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text(tr("s_dc647eb6")) }, singleLine = true, visualTransformation = PasswordVisualTransformation())
                 Button(enabled = !busy && email.contains("@") && password.length >= 8 && (!isSignUp || requestedUsername.length >= 3),
                     onClick = {
                         val api = SupabaseChatClient(context, projectUrl, publishableKey)
@@ -710,10 +787,10 @@ fun ChatScreen() {
                             .onFailure { android.util.Log.w("ORRA", "Google sign-in launch failed", it) }
                     },
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("Continue with Google") }
-                Text("Google sign-in requires the Google provider and OAuth credentials to be enabled in Supabase.")
+                ) { Text(tr("s_a7f3dfc6")) }
+                Text(tr("s_c561de12"))
             } else {
-                Text("Sign in or create an account using a verified mobile number.")
+                Text(tr("s_6eef5d72"))
                 if (!phoneOtpSent) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Box {
@@ -736,11 +813,11 @@ fun ChatScreen() {
                             }
                         }
                         OutlinedTextField(phoneInput, { phoneInput = it }, Modifier.weight(1f),
-                            label = { Text("Mobile number") }, singleLine = true)
+                            label = { Text(tr("s_d1457170")) }, singleLine = true)
                     }
                     if (isSignUp) OutlinedTextField(
                         requestedUsername, { requestedUsername = it }, Modifier.fillMaxWidth(),
-                        label = { Text("Username (optional)") }, singleLine = true
+                        label = { Text(tr("s_b131f167")) }, singleLine = true
                     )
                     Button(enabled = !busy && phoneInput.filter { it.isDigit() }.length >= 6,
                         onClick = {
@@ -756,10 +833,10 @@ fun ChatScreen() {
                         Text(if (busy) "Sending…" else "Send SMS code")
                     }
                 } else {
-                    Text("Enter the six-digit code sent by SMS.")
+                    Text(tr("s_75cf5820"))
                     OutlinedTextField(
                         phoneOtp, { phoneOtp = it.filter(Char::isDigit).take(6) },
-                        Modifier.fillMaxWidth(), label = { Text("SMS verification code") }, singleLine = true
+                        Modifier.fillMaxWidth(), label = { Text(tr("s_45eb9ede")) }, singleLine = true
                     )
                     Button(enabled = !busy && phoneOtp.length == 6,
                         onClick = {
@@ -783,59 +860,63 @@ fun ChatScreen() {
                                 phoneOtp = ""
                             }
                         }, modifier = Modifier.fillMaxWidth()) { Text(if (busy) "Verifying…" else "Verify and sign in") }
-                    TextButton(onClick = { phoneOtpSent = false; phoneOtp = ""; error = "" }) { Text("Change number") }
+                    TextButton(onClick = { phoneOtpSent = false; phoneOtp = ""; error = "" }) { Text(tr("s_10197289")) }
                 }
-                Text("SMS delivery requires an enabled SMS provider in Supabase Auth. The SIM only receives the code; ORRA does not read SMS messages.")
+                Text(tr("s_dbb8c2fd"))
             }
-            Text("Use your own verified account. Never share your one-time code.")
+            Text(tr("s_7c0c27d6"))
         } else if (selected == null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("ORRA Chats", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text("ORRA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Text("@$username", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                TextButton(onClick = {
-                    dndEnabled = !dndEnabled
-                    prefs.edit().putBoolean("orra_dnd_enabled", dndEnabled).apply()
-                    runTask { withContext(Dispatchers.IO) { client!!.updatePresence(true, dndEnabled, false, null) } }
-                }) { Text(if (dndEnabled) "DND ON" else "DND") }
-                IconButton(onClick = { showProfile = true }) {
-                    if (!profile?.avatarUrl.isNullOrBlank()) AsyncImage(profile?.avatarUrl, null, Modifier.size(38.dp).clip(CircleShape))
-                    else Icon(Icons.Default.Person, contentDescription = "Profile")
+                IconButton(onClick = { showFind = !showFind }) { Icon(Icons.Default.Search, contentDescription = tr("find_people")) }
+                Box {
+                    IconButton(onClick = { showListMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = tr("more_options")) }
+                    DropdownMenu(expanded = showListMenu, onDismissRequest = { showListMenu = false }) {
+                        DropdownMenuItem(text = { Text(tr("menu_profile")) }, leadingIcon = { Icon(Icons.Default.Person, null) },
+                            onClick = { showListMenu = false; showProfile = true })
+                        DropdownMenuItem(text = { Text(tr("menu_new_group")) }, leadingIcon = { Icon(Icons.Default.GroupAdd, null) },
+                            onClick = { showListMenu = false; showGroup = true; addingToGroup = null; selectedUsers = emptySet() })
+                        DropdownMenuItem(text = { Text(if (dndEnabled) tr("menu_dnd_off") else tr("menu_dnd_on")) }, leadingIcon = { Icon(Icons.Default.Notifications, null) },
+                            onClick = {
+                                showListMenu = false
+                                dndEnabled = !dndEnabled
+                                prefs.edit().putBoolean("orra_dnd_enabled", dndEnabled).apply()
+                                runTask { withContext(Dispatchers.IO) { client!!.updatePresence(OrraPrivacy.shareOnline(context), dndEnabled, false, null) } }
+                            })
+                        DropdownMenuItem(text = { Text(tr("menu_sign_out")) }, leadingIcon = { Icon(Icons.Default.Logout, null) },
+                            onClick = {
+                                showListMenu = false
+                                SupabaseChatClient.clearSession(context)
+                                token = ""; userId = ""; username = ""; conversations = emptyList(); selected = null
+                            })
+                    }
                 }
-                IconButton(onClick = { showGroup = true; addingToGroup = null; selectedUsers = emptySet() }) {
-                    Icon(Icons.Default.GroupAdd, contentDescription = "New group")
-                }
-                IconButton(onClick = {
-                    SupabaseChatClient.clearSession(context)
-                    token = ""; userId = ""; username = ""; conversations = emptyList(); selected = null
-                }) { Icon(Icons.Default.Logout, contentDescription = "Sign out") }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(search, { search = it }, Modifier.weight(1f), singleLine = true,
-                    label = { Text("Find people by username") })
-                IconButton(enabled = search.isNotBlank() && !busy, onClick = {
-                    runTask { users = withContext(Dispatchers.IO) { client!!.searchUsers(search) } }
-                }) { Icon(Icons.Default.Search, contentDescription = "Search") }
-            }
-            OutlinedTextField(conversationSearch, { conversationSearch = it }, Modifier.fillMaxWidth(),
-                singleLine = true, label = { Text("Search your conversations") })
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("all" to "All", "groups" to "Groups", "direct" to "Direct").forEach { (key, label) ->
-                    if (chatSection == key) Button(onClick = { chatSection = key }) { Text(label) }
-                    else OutlinedButton(onClick = { chatSection = key }) { Text(label) }
-                }
+            OrraSearchPill(conversationSearch, { conversationSearch = it }, tr("list_search"))
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OrraFilterChip(tr("tab_all_chats") + " " + conversations.size, chatSection == "all") { chatSection = "all" }
+                OrraFilterChip(tr("groups"), chatSection == "groups") { chatSection = "groups" }
+                OrraFilterChip(tr("direct"), chatSection == "direct") { chatSection = "direct" }
                 OrraFolders.list(context).forEach { folder ->
                     val folderKey = "folder:" + folder.id
-                    val open = {
+                    OrraFilterChip(folder.name, chatSection == folderKey) {
                         if (OrraFolders.isLocked(context, folder.id)) folderUnlockTarget = folder else chatSection = folderKey
                     }
-                    if (chatSection == folderKey) Button(onClick = { open() }) { Text(folder.name) }
-                    else OutlinedButton(onClick = { open() }) { Text(folder.name) }
+                }
+            }
+            if (showFind) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(search, { search = it }, Modifier.weight(1f), singleLine = true, label = { Text(tr("s_ec908230")) })
+                    IconButton(enabled = search.isNotBlank() && !busy, onClick = {
+                        runTask { users = withContext(Dispatchers.IO) { client!!.searchUsers(search) } }
+                    }) { Icon(Icons.Default.Search, contentDescription = "Search") }
                 }
             }
             if (users.isNotEmpty()) {
-                Text("People", fontWeight = FontWeight.SemiBold)
+                Text(tr("s_78386ec8"), fontWeight = FontWeight.SemiBold)
                 users.forEach { user ->
                     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -850,13 +931,13 @@ fun ChatScreen() {
                                         ?: OrraChatConversation(id, user.username, "", false, 2, user.id)
                                     users = emptyList(); messages = emptyList()
                                 }
-                            }) { Text("Message") }
-                            TextButton(onClick = { selectedUsers = selectedUsers + user.id; showGroup = true }) { Text("Add to group") }
+                            }) { Text(tr("s_4c2a8fe7")) }
+                            TextButton(onClick = { selectedUsers = selectedUsers + user.id; showGroup = true }) { Text(tr("s_8e822dcd")) }
                         }
                     }
                 }
             }
-            Text("Conversations", fontWeight = FontWeight.SemiBold)
+            Text(tr("s_f004c5e3"), fontWeight = FontWeight.SemiBold)
             Surface(Modifier.fillMaxWidth().clickable {
                 selected = OrraChatConversation("orra-ai", "ORRA AI", "Your personal AI assistant", false, 0, null, null, true)
                 messages = emptyList()
@@ -869,7 +950,7 @@ fun ChatScreen() {
                     }
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
                         Text("ORRA AI", fontWeight = FontWeight.SemiBold)
-                        Text("Your personal AI assistant", maxLines = 1,
+                        Text(tr("s_5dae4b8f"), maxLines = 1,
                             color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     }
                     Text("AI", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
@@ -889,120 +970,77 @@ fun ChatScreen() {
                             (conversationSearch.isBlank() || conversation.username.contains(conversationSearch, ignoreCase = true) ||
                                 conversation.lastMessage.contains(conversationSearch, ignoreCase = true))
                     }, key = { it.id }) { conversation ->
-                        Surface(Modifier.fillMaxWidth().clickable {
+                        val presence = presenceByUser[conversation.peerUserId]
+                        OrraChatRow(conversation.username, conversation.lastMessage, presence?.online == true && presence.dnd != true,
+                            OrraLocks.isChatLocked(context, conversation.id), conversation.isGroup) {
                             if (OrraLocks.isChatLocked(context, conversation.id)) lockTarget = conversation
                             else { selected = conversation; messages = emptyList() }
-                        }, shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
-                                    contentAlignment = Alignment.Center) {
-                                    Text(if (conversation.isGroup) "G" else conversation.username.take(1).uppercase(),
-                                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                }
-                                Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                                    Text(conversation.username, fontWeight = FontWeight.SemiBold)
-                                    Text(conversation.lastMessage, maxLines = 1,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        style = MaterialTheme.typography.bodySmall)
-                                    if (!conversation.isGroup) {
-                                        val presence = presenceByUser[conversation.peerUserId]
-                                        Text(
-                                            when {
-                                                presence?.dnd == true -> "● Do not disturb"
-                                                presence?.online == true -> "● Online"
-                                                else -> "○ Offline"
-                                            },
-                                            color = if (presence?.dnd == true) MaterialTheme.colorScheme.error
-                                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            style = MaterialTheme.typography.labelSmall
-                                        )
-                                    }
-                                }
-                                if (conversation.isGroup) Text("${conversation.memberCount}", style = MaterialTheme.typography.labelSmall)
-                            }
                         }
                     }
                 }
             }
         } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { selected = null; messages = emptyList(); error = "" }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(selected!!.username, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(
-                        if (selected!!.isAi) "AI assistant • Ready"
-                        else if (selected!!.isGroup) "Group • ${selected!!.memberCount} members"
-                        else when {
-                            activePeerPresence?.dnd == true -> "Do not disturb"
-                            activePeerPresence?.typing == true && activePeerPresence?.typingConversation == selected!!.id -> "Typing…"
-                            activePeerPresence?.online == true -> "Online"
-                            else -> "Offline • " + (selected!!.peerPhone?.takeIf { it.isNotBlank() } ?: "ORRA")
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (activePeerPresence?.dnd == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (!selected!!.isGroup && !selected!!.isAi) {
-                    IconButton(onClick = {
-                        val number = selected!!.peerPhone
-                        if (number.isNullOrBlank()) error = "This user has not added a phone number to their ORRA profile."
-                        else startCellularCall(selected!!.username, number)
-                    }) {
-                        Icon(Icons.Default.Call, contentDescription = "Voice call")
-                    }
-                    IconButton(onClick = {
-                        val number = selected!!.peerPhone
-                        if (number.isNullOrBlank()) error = "This user has not added a phone number to their ORRA profile."
-                        else startCarrierVideoCall(selected!!.username, number)
-                    }) {
-                        Icon(Icons.Default.Videocam, contentDescription = "Carrier video call")
-                    }
-                    IconButton(onClick = {
-                        val peerId = selected!!.peerUserId
-                        if (peerId.isNullOrBlank()) error = "This ORRA user ID is unavailable."
-                        else runTask {
-                            val call = withContext(Dispatchers.IO) {
-                                OrraCallSignaling(context, userId, token).createCall(peerId, "audio")
-                            }
-                            OrraInternetCallState.begin(call, selected!!.username, true, userId, token)
-                            recordOrraInternetCall(context, selected!!.username, peerId, "Outgoing", "audio")
-                        }
-                    }) {
-                        Icon(Icons.Default.Call, contentDescription = "ORRA internet voice call", tint = MaterialTheme.colorScheme.primary)
-                    }
-                    IconButton(onClick = {
-                        val peerId = selected!!.peerUserId
-                        if (peerId.isNullOrBlank()) error = "This ORRA user ID is unavailable."
-                        else runTask {
-                            val call = withContext(Dispatchers.IO) {
-                                OrraCallSignaling(context, userId, token).createCall(peerId, "video")
-                            }
-                            OrraInternetCallState.begin(call, selected!!.username, true, userId, token)
-                            recordOrraInternetCall(context, selected!!.username, peerId, "Outgoing", "video")
-                        }
-                    }) {
-                        Icon(Icons.Default.Videocam, contentDescription = "ORRA internet video call", tint = MaterialTheme.colorScheme.primary)
-                    }
-                } else {
-                    IconButton(onClick = { addingToGroup = selected; showGroup = true; selectedUsers = emptySet() }) {
-                        Icon(Icons.Default.Add, contentDescription = "Add members")
-                    }
-                }
-                IconButton(onClick = { chatSearchVisible = !chatSearchVisible; chatSearch = "" }) {
-                    Icon(Icons.Default.Search, contentDescription = "Search in chat")
-                }
-                if (!selected!!.isAi) IconButton(onClick = { showChatOptions = true }) { Icon(Icons.Default.Settings, contentDescription = "Chat options") }
+            val peerPresence = if (selected!!.isGroup || selected!!.isAi) null else presenceByUser[selected!!.peerUserId]
+            val headerStatus = when {
+                selected!!.isAi -> "AI assistant • Ready"
+                selected!!.isGroup -> selected!!.memberCount.toString() + " " + tr("members")
+                activePeerPresence?.typing == true -> tr("typing")
+                activePeerPresence?.dnd == true -> tr("menu_dnd_on")
+                activePeerPresence?.online == true -> tr("online_now")
+                else -> tr("offline")
             }
+            fun startOrraCall(type: String) {
+                val peerId = selected!!.peerUserId
+                if (peerId.isNullOrBlank()) error = "This ORRA user ID is unavailable."
+                else if (!OrraNet.isOnline(context)) { error = tr("no_internet"); OrraSfx.play(context, "error") }
+                else runTask {
+                    val created = withContext(Dispatchers.IO) { OrraCallSignaling(context, userId, token).createCall(peerId, type) }
+                    OrraSfx.play(context, "call_start")
+                    OrraInternetCallState.begin(created, selected!!.username, true, userId, token)
+                    recordOrraInternetCall(context, selected!!.username, peerId, "Outgoing", type)
+                }
+            }
+            fun toggleMute() {
+                val next = !muted
+                runTask {
+                    withContext(Dispatchers.IO) { client!!.setConversationMuted(selected!!.id, next) }
+                    muted = next
+                    prefs.edit().putBoolean("chat_muted_${selected!!.id}", next).apply()
+                }
+            }
+            OrraChatTopBar(
+                title = selected!!.username, status = headerStatus,
+                statusColor = if (activePeerPresence?.online == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                avatarUrl = null,
+                onBack = { selected = null; messages = emptyList(); error = ""; showEmoji = false },
+                onOpenProfile = { if (!selected!!.isAi) showPeerProfile = true },
+                onCall = if (selected!!.isAi) null else ({ startOrraCall("audio") }),
+                menu = if (selected!!.isAi) listOf(
+                    OrraMenuItem(tr("menu_search"), Icons.Default.Search) { chatSearchVisible = true }
+                ) else listOf(
+                    OrraMenuItem(tr(if (muted) "menu_unmute" else "menu_mute"), if (muted) Icons.Default.NotificationsOff else Icons.Default.Notifications) { toggleMute() },
+                    OrraMenuItem(tr("menu_video"), Icons.Default.Videocam) { startOrraCall("video") },
+                    OrraMenuItem(tr("menu_search"), Icons.Default.Search) { chatSearchVisible = true },
+                    OrraMenuItem(tr("menu_wallpaper"), Icons.Default.Wallpaper) { showWallpaper = true },
+                    OrraMenuItem(tr("menu_clear"), Icons.Default.DeleteSweep) {
+                        val last = messages.lastOrNull()
+                        val cutoff = runCatching { java.time.OffsetDateTime.parse(last?.createdAt.orEmpty()).toInstant().toEpochMilli() }.getOrDefault(System.currentTimeMillis())
+                        prefs.edit().putLong("chat_cleared_" + selected!!.id, cutoff).apply()
+                        messages = emptyList()
+                    },
+                    OrraMenuItem(tr("menu_delete"), Icons.Default.Delete, danger = true) { confirmDeleteChat = true },
+                    OrraMenuItem(tr("more_options"), Icons.Default.MoreVert) { showChatOptions = true }
+                )
+            )
             if (chatSearchVisible) {
                 OutlinedTextField(chatSearch, { chatSearch = it }, Modifier.fillMaxWidth(),
-                    singleLine = true, label = { Text("Search messages in this chat") })
+                    singleLine = true, label = { Text(tr("s_1ab0d30f")) })
             }
             LazyColumn(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(messages.filter { chatSearch.isBlank() || it.body.contains(chatSearch, ignoreCase = true) }, key = { it.id }) { message ->
+                items(visibleMessages.filter { chatSearch.isBlank() || it.body.contains(chatSearch, ignoreCase = true) }, key = { it.id }) { message ->
                     val mine = message.senderId == userId
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
                         Surface(
@@ -1023,11 +1061,26 @@ fun ChatScreen() {
                                     when (message.type) { "image" -> "image"; "audio" -> "audio"; "video" -> "video"; "file" -> "file"; else -> "" },
                                     message.id, selected!!.isGroup
                                 ) {
-                                when (message.type) {
+                                if (!mine && OrraMedia.viewLimit(message.body) > 0 && (message.type == "image" || message.type == "video")) {
+                                    val limit = OrraMedia.viewLimit(message.body)
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(if (message.id in expiredViews) tr("view_expired") else tr("view_tap_open") + " (" + limit + ")", fontWeight = FontWeight.SemiBold)
+                                        if (message.id !in expiredViews) Button(onClick = {
+                                            scope.launch {
+                                                val left = runCatching { withContext(Dispatchers.IO) { client!!.consumeMediaView(message.id) } }.getOrDefault(-2)
+                                                if (left == -2) expiredViews.add(message.id)
+                                                else if (message.type == "image") viewerImage = message.mediaUrl
+                                                else runCatching {
+                                                    context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(message.mediaUrl), "video/*").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                                }
+                                            }
+                                        }) { Text(tr("view_open")) }
+                                    }
+                                } else when (message.type) {
                                     "image" -> if (!message.mediaUrl.isNullOrBlank()) {
                                         AsyncImage(message.mediaUrl, contentDescription = "Shared image",
                                             modifier = Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(12.dp)))
-                                    } else Text("Image attachment")
+                                    } else Text(tr("s_0b73346c"))
                                     "audio" -> Row(verticalAlignment = Alignment.CenterVertically) {
                                         IconButton(onClick = {
                                             runCatching {
@@ -1039,10 +1092,10 @@ fun ChatScreen() {
                                                 }
                                             }.onFailure { android.util.Log.w("ORRA", "Voice playback failed", it) }
                                         }) { Icon(Icons.Default.Mic, contentDescription = "Play voice message") }
-                                        Text("Voice message")
+                                        Text(tr("s_a716aa47"))
                                     }
                                     "file", "video" -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text(if (message.type == "video") "Video attachment: ${message.body}" else "File: ${message.body}")
+                                        Text(if (message.type == "video") "Video attachment: ${OrraMedia.cleanBody(message.body)}" else "File: ${OrraMedia.cleanBody(message.body)}")
                                         if (!message.mediaUrl.isNullOrBlank()) {
                                             TextButton(onClick = {
                                                 val mime = if (message.type == "video") "video/*" else "*/*"
@@ -1050,28 +1103,34 @@ fun ChatScreen() {
                                                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                                 runCatching { context.startActivity(intent) }
                                                     .onFailure { android.util.Log.w("ORRA", "Attachment open failed", it) }
-                                            }) { Text("Open attachment") }
+                                            }) { Text(tr("s_191499bc")) }
                                         }
                                     }
                                     "location" -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text("Current location", fontWeight = FontWeight.SemiBold)
+                                        Text(tr("s_cec99c77"), fontWeight = FontWeight.SemiBold)
                                         Text(message.body, style = MaterialTheme.typography.bodySmall)
                                         TextButton(onClick = {
                                             val mapsUrl = message.body.substringAfterLast("\n")
                                             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(mapsUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                                                 .onFailure { android.util.Log.w("ORRA", "Map launch failed", it) }
-                                        }) { Text("Open in maps") }
-                                        TextButton(onClick = { clipboard.setText(AnnotatedString(message.body)) }) { Text("Copy location details") }
+                                        }) { Text(tr("s_eae42dd7")) }
+                                        TextButton(onClick = { clipboard.setText(AnnotatedString(message.body)) }) { Text(tr("s_5bbd311e")) }
                                     }
                                     "contact" -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text("Shared contact", fontWeight = FontWeight.SemiBold)
+                                        Text(tr("s_94b1ced2"), fontWeight = FontWeight.SemiBold)
                                         Text(message.body)
-                                        TextButton(onClick = { clipboard.setText(AnnotatedString(message.body)) }) { Text("Copy contact") }
+                                        TextButton(onClick = { clipboard.setText(AnnotatedString(message.body)) }) { Text(tr("s_7fec99c6")) }
                                     }
                                     else -> Text(message.body)
                                 }
                                 }
-                                if (message.editedAt != null) Text("Edited", style = MaterialTheme.typography.labelSmall,
+                                if (message.type in listOf("image", "video", "audio", "file") && !message.mediaUrl.isNullOrBlank() && OrraMedia.viewLimit(message.body) == 0) {
+                                    TextButton(onClick = {
+                                        val savedName = Uri.parse(message.mediaUrl).lastPathSegment ?: "orra_file"
+                                        voiceStatus = if (OrraMedia.save(context, message.mediaUrl!!, savedName)) tr("saved_downloads") else tr("save_blocked")
+                                    }) { Text(tr("save_to_device")) }
+                                }
+                                if (message.editedAt != null) Text(tr("s_67ed6ddb"), style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(formatChatTimestamp(message.createdAt),
                                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1092,26 +1151,23 @@ fun ChatScreen() {
                     }
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                if (!selected!!.isAi) {
-                    IconButton(onClick = { showAttachmentMenu = true }, enabled = !busy) {
-                        Icon(Icons.Default.AttachFile, contentDescription = "Attach media, document, location or contact")
+            if (showEmoji) OrraEmojiPanel { messageText += it }
+            OrraComposerBar(
+                text = messageText, onText = { messageText = it },
+                hint = if (selected!!.isAi) "Message ORRA AI…" else tr("hint_message"),
+                canAttach = !selected!!.isAi, recording = recording, busy = busy,
+                onEmoji = { showEmoji = !showEmoji },
+                onAttach = { showEmoji = false; showAttachmentMenu = true },
+                onMic = {
+                    if (!selected!!.isAi) {
+                        if (recording) { recorder.stop(); voiceStatus = "Finishing voice message…" }
+                        else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
                     }
-                    IconButton(onClick = {
-                        if (recording) {
-                            recorder.stop()
-                            voiceStatus = "Finishing voice message…"
-                        } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
-                    }, enabled = !busy) {
-                        Icon(Icons.Default.Mic, contentDescription = if (recording) "Stop recording" else "Record voice message",
-                            tint = if (recording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-                    }
-                }
-                OutlinedTextField(messageText, { messageText = it }, Modifier.weight(1f),
-                    placeholder = { Text(if (selected!!.isAi) "Message ORRA AI…" else "Message") }, maxLines = 4)
-                IconButton(enabled = messageText.isNotBlank() && !busy && selected != null && client != null, onClick = {
+                },
+                onSend = {
+                    if (selected != null && client != null) {
                     val body = messageText.trim()
-                    val active = selected
+                        val active = selected
                     val api = client
                     if (body.isNotBlank() && active != null && api != null) {
                         scope.launch {
@@ -1126,48 +1182,168 @@ fun ChatScreen() {
                                     withContext(Dispatchers.IO) { api.sendMessage(active.id, body) }
                                     messages = withContext(Dispatchers.IO) { api.loadMessages(active.id) }
                                 }
+                                OrraSfx.play(context, "send")
                             } catch (e: Exception) {
-                                messageText = body
+                                OrraSfx.play(context, "error")
                                 android.util.Log.w("ORRA", "Message send failed", e)
+                                var failure: Exception? = e
+                                if (!OrraNet.isOnline(context)) failure = IllegalStateException(tr("no_internet"))
+                                else if (e.message.orEmpty().contains("session or permissions", ignoreCase = true) && refreshToken.isNotBlank()) {
+                                    val refreshedOk = withContext(Dispatchers.IO) { orraRefreshSession(context) }
+                                    if (refreshedOk) {
+                                        token = prefs.getString("token", "").orEmpty()
+                                        refreshToken = prefs.getString("refresh_token", "").orEmpty()
+                                        val retry = orraClient(context)
+                                        failure = try {
+                                            withContext(Dispatchers.IO) {
+                                                if (retry == null) throw IllegalStateException("Sign in again to send messages.")
+                                                if (active.isAi) retry.sendOrraAiMessage(body) else retry.sendMessage(active.id, body)
+                                            }
+                                            null
+                                        } catch (e2: Exception) { e2 }
+                                        if (failure == null && retry != null) {
+                                            messages = withContext(Dispatchers.IO) { if (active.isAi) retry.loadOrraAiMessages() else retry.loadMessages(active.id) }
+                                        }
+                                    }
+                                }
+                                if (failure != null) {
+                                    messageText = body
+                                    error = tr("send_failed") + ": " + (failure.message ?: "")
+                                }
                             } finally {
                                 busy = false
                             }
                         }
                     }
-                }) { Icon(Icons.Default.Send, contentDescription = "Send") }
-            }
+                    }
+                }
+            )
         }
-        if (busy) Text("Syncing…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        if (error.isNotBlank()) Text(error, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+        if (busy) Text(tr("s_50e713b4"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
     }
 
     if (showAttachmentMenu) {
-        AlertDialog(
-            onDismissRequest = { showAttachmentMenu = false },
-            title = { Text("Share with this chat") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TextButton(onClick = { showAttachmentMenu = false; attachmentPicker.launch("image/*") }) { Text("Photo from gallery") }
-                    TextButton(onClick = { showAttachmentMenu = false; documentPicker.launch(arrayOf("*/*")) }) { Text("Document, audio or video file") }
-                    TextButton(onClick = {
-                        showAttachmentMenu = false
-                        locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-                    }) { Text("Share current location") }
-                    TextButton(onClick = { showAttachmentMenu = false; showContactShare = true }) { Text("Share a contact") }
-                }
+        OrraAttachSheet(
+            viewLimit = viewLimit, onViewLimit = { viewLimit = it }, onDismiss = { showAttachmentMenu = false },
+            onGallery = { showAttachmentMenu = false; galleryPicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
+            onCamera = {
+                showAttachmentMenu = false
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) launchCamera()
+                else cameraPermission.launch(Manifest.permission.CAMERA)
             },
-            confirmButton = { TextButton(onClick = { showAttachmentMenu = false }) { Text("Close") } }
+            onFile = { showAttachmentMenu = false; documentPicker.launch(arrayOf("*/*")) },
+            onMusic = { showAttachmentMenu = false; documentPicker.launch(arrayOf("audio/*")) },
+            onLocation = {
+                showAttachmentMenu = false
+                locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            },
+            onContact = { showAttachmentMenu = false; showContactShare = true }
         )
     }
+
+    if (showPeerProfile && selected != null) {
+        OrraPeerProfile(
+            name = selected!!.username,
+            status = if (selected!!.isGroup) selected!!.memberCount.toString() + " " + tr("members")
+                else if (activePeerPresence?.online == true) tr("online_now") else tr("offline"),
+            phone = selected!!.peerPhone, muted = muted, canCall = !selected!!.isGroup && !selected!!.isAi,
+            onDismiss = { showPeerProfile = false }, onMessage = { showPeerProfile = false },
+            onToggleMute = {
+                val next = !muted
+                runTask {
+                    withContext(Dispatchers.IO) { client!!.setConversationMuted(selected!!.id, next) }
+                    muted = next
+                    prefs.edit().putBoolean("chat_muted_${selected!!.id}", next).apply()
+                }
+            },
+            onCall = {
+                showPeerProfile = false
+                val peerId = selected!!.peerUserId
+                if (!peerId.isNullOrBlank()) {
+                    if (!OrraNet.isOnline(context)) error = tr("no_internet")
+                    else runTask {
+                        val created = withContext(Dispatchers.IO) { OrraCallSignaling(context, userId, token).createCall(peerId, "audio") }
+                        OrraInternetCallState.begin(created, selected!!.username, true, userId, token)
+                    }
+                }
+            },
+            onVideo = {
+                showPeerProfile = false
+                val peerId = selected!!.peerUserId
+                if (!peerId.isNullOrBlank()) {
+                    if (!OrraNet.isOnline(context)) error = tr("no_internet")
+                    else runTask {
+                        val created = withContext(Dispatchers.IO) { OrraCallSignaling(context, userId, token).createCall(peerId, "video") }
+                        OrraInternetCallState.begin(created, selected!!.username, true, userId, token)
+                    }
+                }
+            }
+        )
+    }
+
+    if (showWallpaper) {
+        val wallpaperPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            if (uri != null) scope.launch { withContext(Dispatchers.IO) { OrraWallpaper.setCustom(context, uri) } }
+        }
+        AlertDialog(
+            onDismissRequest = { showWallpaper = false },
+            title = { Text(tr("menu_wallpaper")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OrraWallpaper.presets.forEach { preset ->
+                        TextButton(onClick = { OrraWallpaper.setPreset(context, preset) }) {
+                            Text((if (OrraWallpaper.current(context) == preset) "✓  " else "") + tr("wp_" + preset.lowercase()))
+                        }
+                    }
+                    TextButton(onClick = { wallpaperPicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
+                        Text(tr("wallpaper_from_phone"))
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showWallpaper = false }) { Text(tr("save")) } }
+        )
+    }
+
+    if (confirmDeleteChat && selected != null) {
+        AlertDialog(
+            onDismissRequest = { confirmDeleteChat = false },
+            title = { Text(tr("menu_delete")) },
+            text = { Text(tr("delete_chat_body")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDeleteChat = false
+                    runTask {
+                        withContext(Dispatchers.IO) { client!!.deleteConversationForMe(selected!!.id) }
+                        selected = null
+                        conversations = withContext(Dispatchers.IO) { client!!.loadConversations() }
+                    }
+                }) { Text(tr("delete"), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDeleteChat = false }) { Text(tr("cancel")) } }
+        )
+    }
+
+    viewerImage?.let { url ->
+        Dialog(onDismissRequest = { viewerImage = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            val dialogWindow = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+            androidx.compose.runtime.SideEffect { dialogWindow?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) }
+            Surface(modifier = Modifier.fillMaxSize().clickable { viewerImage = null }, color = Color.Black) {
+                AsyncImage(url, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
+            }
+        }
+    }
+
 
     if (showContactShare) {
         AlertDialog(
             onDismissRequest = { showContactShare = false },
-            title = { Text("Share contact") },
+            title = { Text(tr("s_b32f077b")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(contactShareName, { contactShareName = it }, label = { Text("Contact name") }, singleLine = true)
-                    OutlinedTextField(contactShareNumber, { contactShareNumber = it }, label = { Text("Phone number") }, singleLine = true)
-                    Text("This sends a contact card in ORRA. It does not add the contact to the recipient's phone automatically.",
+                    OutlinedTextField(contactShareName, { contactShareName = it }, label = { Text(tr("s_8728ddcf")) }, singleLine = true)
+                    OutlinedTextField(contactShareNumber, { contactShareNumber = it }, label = { Text(tr("s_1f8261d1")) }, singleLine = true)
+                    Text(tr("s_9b9055fc"),
                         style = MaterialTheme.typography.bodySmall)
                 }
             },
@@ -1181,26 +1357,26 @@ fun ChatScreen() {
                         showContactShare = false
                         contactShareName = ""; contactShareNumber = ""
                     }
-                }) { Text("Send contact") }
+                }) { Text(tr("s_9c1370d7")) }
             },
-            dismissButton = { TextButton(onClick = { showContactShare = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { showContactShare = false }) { Text(tr("s_ea478870")) } }
         )
     }
 
     if (showProfile) {
         AlertDialog(
             onDismissRequest = { showProfile = false },
-            title = { Text("Your ORRA profile") },
+            title = { Text(tr("s_9965e37a")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     if (!coverPreview.isNullOrBlank()) AsyncImage(coverPreview, null,
                         Modifier.fillMaxWidth().height(100.dp).clip(RoundedCornerShape(14.dp)))
                     if (!avatarPreview.isNullOrBlank()) AsyncImage(avatarPreview, null,
                         Modifier.size(72.dp).clip(CircleShape))
-                    OutlinedTextField(displayName, { displayName = it }, label = { Text("Display name") }, singleLine = true)
-                    OutlinedTextField(bio, { bio = it }, label = { Text("About") }, maxLines = 3)
-                    OutlinedTextField(phoneNumber, { phoneNumber = it }, label = { Text("Verified phone number for SIM calls") }, singleLine = true)
-                    Text("A phone number is discoverable by other ORRA users only after its SMS code is verified.",
+                    OutlinedTextField(displayName, { displayName = it }, label = { Text(tr("s_bc9e270b")) }, singleLine = true)
+                    OutlinedTextField(bio, { bio = it }, label = { Text(tr("s_8f7f4c1c")) }, maxLines = 3)
+                    OutlinedTextField(phoneNumber, { phoneNumber = it }, label = { Text(tr("s_ea7237f4")) }, singleLine = true)
+                    Text(tr("s_6e08c853"),
                         style = MaterialTheme.typography.bodySmall)
                     if (phoneNumber.isNotBlank() && phoneNumber != profile?.phoneNumber && !phoneOtpPending) {
                         OutlinedButton(enabled = !busy, onClick = {
@@ -1210,11 +1386,11 @@ fun ChatScreen() {
                                 phoneOtpCode = ""
                                 phoneStatus = "Verification code requested. Check the SMS inbox."
                             }
-                        }) { Text("Verify phone by SMS") }
+                        }) { Text(tr("s_a490be42")) }
                     }
                     if (phoneOtpPending) {
                         OutlinedTextField(phoneOtpCode, { phoneOtpCode = it.filter(Char::isDigit).take(6) },
-                            label = { Text("SMS verification code") }, singleLine = true)
+                            label = { Text(tr("s_45eb9ede")) }, singleLine = true)
                         Button(enabled = !busy && phoneOtpCode.length == 6, onClick = {
                             runTask {
                                 val response = withContext(Dispatchers.IO) { client!!.verifyPhoneChangeOtp(phoneNumber, phoneOtpCode) }
@@ -1232,14 +1408,14 @@ fun ChatScreen() {
                                 phoneOtpCode = ""
                                 phoneStatus = if (phoneNumber.isNotBlank()) "Phone number verified." else "Verification was not confirmed by the server."
                             }
-                        }) { Text("Confirm phone number") }
-                        TextButton(onClick = { phoneOtpPending = false; phoneOtpCode = "" }) { Text("Cancel verification") }
+                        }) { Text(tr("s_db566c12")) }
+                        TextButton(onClick = { phoneOtpPending = false; phoneOtpCode = "" }) { Text(tr("s_b2f2a308")) }
                     }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { avatarPicker.launch("image/*") }) { Icon(Icons.Default.Person, null); Text(" Photo") }
-                        OutlinedButton(onClick = { coverPicker.launch("image/*") }) { Icon(Icons.Default.Photo, null); Text(" Cover") }
+                        OutlinedButton(onClick = { avatarPicker.launch("image/*") }) { Icon(Icons.Default.Person, null); Text(" " + tr("s_c03d53b7")) }
+                        OutlinedButton(onClick = { coverPicker.launch("image/*") }) { Icon(Icons.Default.Photo, null); Text(" " + tr("s_c795dfff")) }
                     }
-                    Text("Images are stored in private ORRA profile storage. Only verified phone numbers are shown in keypad lookup.", style = MaterialTheme.typography.bodySmall)
+                    Text(tr("s_bc43a2b2"), style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = {
@@ -1252,9 +1428,9 @@ fun ChatScreen() {
                         newAvatarPath = null; newCoverPath = null
                         showProfile = false
                     }
-                }) { Text("Save profile") }
+                }) { Text(tr("s_5d3d95cb")) }
             },
-            dismissButton = { TextButton(onClick = { showProfile = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { showProfile = false }) { Text(tr("s_ea478870")) } }
         )
     }
 
@@ -1264,11 +1440,11 @@ fun ChatScreen() {
             title = { Text(if (addingToGroup == null) "Create group" else "Add group members") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (addingToGroup == null) OutlinedTextField(groupTitle, { groupTitle = it }, label = { Text("Group name") }, singleLine = true)
-                    OutlinedTextField(search, { search = it }, label = { Text("Find members") }, singleLine = true)
+                    if (addingToGroup == null) OutlinedTextField(groupTitle, { groupTitle = it }, label = { Text(tr("s_c6155aae")) }, singleLine = true)
+                    OutlinedTextField(search, { search = it }, label = { Text(tr("s_94e8be8c")) }, singleLine = true)
                     Button(enabled = search.isNotBlank() && !busy, onClick = {
                         runTask { users = withContext(Dispatchers.IO) { client!!.searchUsers(search) } }
-                    }) { Text("Search people") }
+                    }) { Text(tr("s_df32b432")) }
                     users.forEach { user ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = user.id in selectedUsers, onCheckedChange = {
@@ -1298,17 +1474,17 @@ fun ChatScreen() {
                     }
                 }) { Text(if (addingToGroup == null) "Create group" else "Add members") }
             },
-            dismissButton = { TextButton(onClick = { showGroup = false; addingToGroup = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { showGroup = false; addingToGroup = null }) { Text(tr("s_ea478870")) } }
         )
     }
 
     if (showChatOptions && selected != null) {
         AlertDialog(
             onDismissRequest = { showChatOptions = false },
-            title = { Text("Chat settings") },
+            title = { Text(tr("s_dfe59e71")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Conversation theme")
+                    Text(tr("s_c7bf504f"))
                     listOf("liquid" to "iPhone Island Liquid", "dark" to "iPhone Dark",
                         "ocean" to "Ocean", "violet" to "Violet", "rose" to "Rose").forEach { (key, label) ->
                         TextButton(onClick = {
@@ -1334,7 +1510,7 @@ fun ChatScreen() {
                                 pendingSaveContact = contact
                                 contactsWritePermission.launch(Manifest.permission.WRITE_CONTACTS)
                             }
-                        }) { Text("Save contact to phone") }
+                        }) { Text(tr("s_45248b9a")) }
                     }
                     if (selected!!.isGroup) {
                         TextButton(onClick = {
@@ -1344,7 +1520,7 @@ fun ChatScreen() {
                                 conversations = withContext(Dispatchers.IO) { client!!.loadConversations() }
                             }
                             showChatOptions = false
-                        }) { Text("Leave group") }
+                        }) { Text(tr("s_129b9e34")) }
                     } else {
                         TextButton(onClick = {
                             val peer = selected!!.peerUserId
@@ -1355,12 +1531,12 @@ fun ChatScreen() {
                                 conversations = withContext(Dispatchers.IO) { client!!.loadConversations() }
                             }
                             showChatOptions = false
-                        }) { Text("Block user") }
+                        }) { Text(tr("s_f84e2dc4")) }
                     }
                     TextButton(onClick = {
                         showDeletedHistory = true
                         showChatOptions = false
-                    }) { Text("View deleted message history") }
+                    }) { Text(tr("s_e5a96785")) }
                     TextButton(onClick = {
                         runTask {
                             withContext(Dispatchers.IO) { client!!.deleteConversationForMe(selected!!.id) }
@@ -1368,24 +1544,24 @@ fun ChatScreen() {
                             conversations = withContext(Dispatchers.IO) { client!!.loadConversations() }
                         }
                         showChatOptions = false
-                    }) { Text("Delete chat for me", color = MaterialTheme.colorScheme.error) }
+                    }) { Text(tr("s_b3b95826"), color = MaterialTheme.colorScheme.error) }
                 }
             },
-            confirmButton = { TextButton(onClick = { showChatOptions = false }) { Text("Close") } }
+            confirmButton = { TextButton(onClick = { showChatOptions = false }) { Text(tr("s_d3d2e617")) } }
         )
     }
 
     if (showDeletedHistory) {
         AlertDialog(
             onDismissRequest = { showDeletedHistory = false },
-            title = { Text("Deleted message history") },
+            title = { Text(tr("s_9c78b3e3")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (deletedHistory.isEmpty()) Text("No deleted message events were found in this chat.")
+                    if (deletedHistory.isEmpty()) Text(tr("s_ab03e279"))
                     else deletedHistory.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
                 }
             },
-            confirmButton = { TextButton(onClick = { showDeletedHistory = false }) { Text("Close") } }
+            confirmButton = { TextButton(onClick = { showDeletedHistory = false }) { Text(tr("s_d3d2e617")) } }
         )
     }
 
@@ -1393,19 +1569,19 @@ fun ChatScreen() {
         val message = selectedMessage!!
         AlertDialog(
             onDismissRequest = { selectedMessage = null },
-            title = { Text("Message options") },
+            title = { Text(tr("s_04a07156")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (message.senderId == userId && !message.deletedForEveryone) {
                         if (message.type == "text") {
-                            OutlinedTextField(editText, { editText = it }, label = { Text("Edit message") }, maxLines = 4)
+                            OutlinedTextField(editText, { editText = it }, label = { Text(tr("s_c128557c")) }, maxLines = 4)
                             TextButton(onClick = {
                                 runTask {
                                     withContext(Dispatchers.IO) { client!!.editMessage(message.id, editText) }
                                     messages = withContext(Dispatchers.IO) { client!!.loadMessages(selected!!.id) }
                                 }
                                 selectedMessage = null
-                            }) { Text("Save edit") }
+                            }) { Text(tr("s_34c54dc7")) }
                         }
                         TextButton(onClick = {
                             runTask {
@@ -1413,10 +1589,10 @@ fun ChatScreen() {
                                 messages = withContext(Dispatchers.IO) { client!!.loadMessages(selected!!.id) }
                             }
                             selectedMessage = null
-                        }) { Text("Delete for everyone", color = MaterialTheme.colorScheme.error) }
+                        }) { Text(tr("s_ac3c6d8b"), color = MaterialTheme.colorScheme.error) }
                     }
                     if (messageHistory.isNotEmpty()) {
-                        Text("Message history", fontWeight = FontWeight.SemiBold)
+                        Text(tr("s_3d14cac6"), fontWeight = FontWeight.SemiBold)
                         messageHistory.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
                     }
                     TextButton(onClick = {
@@ -1425,10 +1601,10 @@ fun ChatScreen() {
                             messages = withContext(Dispatchers.IO) { client!!.loadMessages(selected!!.id) }
                         }
                         selectedMessage = null
-                    }) { Text("Delete for me") }
+                    }) { Text(tr("s_c7fe5a06")) }
                 }
             },
-            confirmButton = { TextButton(onClick = { selectedMessage = null }) { Text("Close") } }
+            confirmButton = { TextButton(onClick = { selectedMessage = null }) { Text(tr("s_d3d2e617")) } }
         )
     }
 }

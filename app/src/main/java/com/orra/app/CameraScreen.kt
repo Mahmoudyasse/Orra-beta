@@ -97,8 +97,8 @@ fun CameraScreen() {
         Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 58.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("ORRA Camera", style = MaterialTheme.typography.headlineMedium)
-        Text("Photos and videos are captured on this device.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+        Text(tr("s_51520a56"), style = MaterialTheme.typography.headlineMedium)
+        Text(tr("s_b6e6b258"), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
             style = MaterialTheme.typography.bodySmall)
         Surface(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -120,8 +120,8 @@ fun CameraScreen() {
             } else {
                 Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center) {
-                    Text("Allow camera access to start the preview.")
-                    Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) { Text("Allow camera") }
+                    Text(tr("s_064dfd71"))
+                    Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) { Text(tr("s_18fca3d0")) }
                 }
             }
         }
@@ -134,7 +134,7 @@ fun CameraScreen() {
             OutlinedButton(modifier = Modifier.weight(1f), enabled = hasPermission && !isRecordingVideo,
                 onClick = { frontCamera = !frontCamera; flashEnabled = false; zoom = 1f }) {
                 Icon(Icons.Default.SwitchCamera, contentDescription = null)
-                Text(" Flip")
+                Text(" " + tr("s_9ffbd422"))
             }
             OutlinedButton(modifier = Modifier.weight(1f), enabled = hasPermission && camera?.cameraInfo?.hasFlashUnit() == true && !frontCamera,
                 onClick = {
@@ -175,7 +175,7 @@ fun CameraScreen() {
                         })
                 }) {
                 Icon(Icons.Default.PhotoCamera, contentDescription = null)
-                Text(" Snap")
+                Text(" " + tr("s_9ad09a90"))
             }
         }
 
@@ -204,7 +204,7 @@ fun CameraScreen() {
                 camera?.cameraControl?.setZoomRatio(it)
             }, valueRange = 1f..maxZoom)
         }
-        Text("Photos: Pictures/ORRA. Videos: Movies/ORRA. Camera and microphone are used only after permission.",
+        Text(tr("s_c633a786"),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f))
     }
 

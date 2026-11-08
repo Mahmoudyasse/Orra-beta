@@ -128,7 +128,8 @@ class SupabaseChatClient(
                     else -> "Could not connect to ORRA right now. Please try again."
                 }
                 android.util.Log.w("ORRA", "Request failed (HTTP $code): " + detail.take(300))
-                throw IllegalStateException(safeMessage)
+                val extra = if (path.startsWith("/rest/v1/messages")) " [HTTP $code: " + detail.take(90) + "]" else " [HTTP $code]"
+                throw IllegalStateException(safeMessage + extra)
             }
             return response
         } finally {
@@ -613,6 +614,10 @@ class SupabaseChatClient(
             .put("sender_id", uid).put("body", caption.ifBlank { type })
             .put("message_type", type).put("media_url", mediaPath))
     }
+
+    /** Returns -1 for unlimited media, -2 when no views are left, otherwise the views remaining. */
+    fun consumeMediaView(messageId: String): Int =
+        request("/rest/v1/rpc/consume_media_view", "POST", JSONObject().put("p_message", messageId)).trim().toIntOrNull() ?: -2
 
     fun sendLocationMessage(conversationId: String, latitude: String, longitude: String) {
         val uid = currentUserId ?: throw IllegalStateException("Sign in again.")

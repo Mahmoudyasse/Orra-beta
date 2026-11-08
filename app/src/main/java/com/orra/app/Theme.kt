@@ -20,6 +20,7 @@ val GlowCalls = Color(0xFF30D158)
 val GlowKeypad = Color(0xFF8B7DFF)
 val GlowContacts = Color(0xFFFFB020)
 val GlowSettings = Color(0xFF4CC9FF)
+val GlowSim = Color(0xFFFF6FB5)
 
 object OrraAppearance {
     val mode = mutableStateOf("system")
@@ -58,9 +59,9 @@ fun OrraTheme(content: @Composable () -> Unit) {
     val scheme = if (dark) {
         darkColorScheme(
             primary = accent, secondary = Indigo, tertiary = Mint,
-            background = Ink, surface = Color(0xFF10111A),
+            background = Color.Black, surface = Color(0xFF0A0A0A),
             onBackground = Color.White, onSurface = Color.White,
-            surfaceVariant = Color(0xFF1C1D29)
+            surfaceVariant = Color(0xFF181818)
         )
     } else {
         lightColorScheme(
@@ -69,6 +70,17 @@ fun OrraTheme(content: @Composable () -> Unit) {
             onBackground = Ink, onSurface = Ink,
             surfaceVariant = Color(0xFFE8E8F0)
         )
+    }
+    val view = androidx.compose.ui.platform.LocalView.current
+    if (!view.isInEditMode) {
+        androidx.compose.runtime.SideEffect {
+            val window = (view.context as? android.app.Activity)?.window
+            if (window != null) {
+                val controller = androidx.core.view.WindowCompat.getInsetsController(window, view)
+                controller.isAppearanceLightStatusBars = !dark
+                controller.isAppearanceLightNavigationBars = !dark
+            }
+        }
     }
     MaterialTheme(colorScheme = scheme, content = content)
 }

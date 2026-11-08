@@ -1,5 +1,6 @@
 package com.orra.app
 
+import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -65,19 +66,40 @@ import kotlinx.coroutines.withContext
 import android.app.Activity
 
 class MainActivity : ComponentActivity() {
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (ev.action == android.view.MotionEvent.ACTION_UP) OrraSfx.play(this, "tap")
+        return super.dispatchTouchEvent(ev)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        OrraSecurity.lastStopAt = android.os.SystemClock.elapsedRealtime()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (OrraSecurity.appLockEnabled(this) && OrraSecurity.lastStopAt > 0 &&
+            android.os.SystemClock.elapsedRealtime() - OrraSecurity.lastStopAt > 15_000 && OrraSecurity.deviceSecure(this)) {
+            OrraSecurity.locked.value = true
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         OrraAppearance.load(this)
         OrraLang.load(this)
         OrraEye.load(this)
+        OrraSecurity.load(this)
+        OrraSfx.init(this)
         consumeAuthCallback(intent)
         setContent {
             OrraTheme {
-                CompositionLocalProvider(LocalLayoutDirection provides if (OrraLang.isRtl()) LayoutDirection.Rtl else LayoutDirection.Ltr) {
+                CompositionLocalProvider(LocalLayoutDirection provides (OrraLang.layoutOverride() ?: LocalLayoutDirection.current)) {
                     Box(Modifier.fillMaxSize()) {
                         if (OrraInternetCallState.callId != null) OrraInternetCallScreen() else if (OrraCallState.activeCall != null) InCallScreen() else OrraApp()
                         OrraEyeOverlay()
+                        OrraSecurityLayer()
                     }
                 }
             }
@@ -134,6 +156,7 @@ private data class Tab(val label: String, val icon: ImageVector, val color: Colo
 private val tabs = listOf(
     Tab("Chats", Icons.Filled.Email, GlowChats),
     Tab("Calls", Icons.Filled.Call, GlowCalls),
+    Tab("SIM", Icons.Filled.SimCard, GlowSim),
     Tab("Keypad", Icons.Filled.Phone, GlowKeypad),
     Tab("Contacts", Icons.Filled.Person, GlowContacts),
     Tab("Settings", Icons.Filled.Settings, GlowSettings)
@@ -177,18 +200,37 @@ fun OrraApp() {
             delay(OrraPower.pollDelay(context, 30000))
         }
     }
+    val permissionRequest = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { }
+    LaunchedEffect(Unit) {
+        val prefs = OrraPrefs.get(context)
+        if (!prefs.getBoolean("permissions_asked", false)) {
+            prefs.edit().putBoolean("permissions_asked", true).apply()
+            val wanted = mutableListOf(
+                android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAMERA,
+                android.Manifest.permission.READ_CONTACTS, android.Manifest.permission.WRITE_CONTACTS,
+                android.Manifest.permission.READ_PHONE_STATE, android.Manifest.permission.CALL_PHONE,
+                android.Manifest.permission.READ_CALL_LOG)
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                wanted += listOf(android.Manifest.permission.POST_NOTIFICATIONS, android.Manifest.permission.READ_MEDIA_IMAGES,
+                    android.Manifest.permission.READ_MEDIA_VIDEO, android.Manifest.permission.READ_MEDIA_AUDIO)
+            } else wanted += android.Manifest.permission.READ_EXTERNAL_STORAGE
+            val missing = wanted.filter { androidx.core.content.ContextCompat.checkSelfPermission(context, it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
+            if (missing.isNotEmpty()) permissionRequest.launch(missing.toTypedArray())
+        }
+    }
     var splash by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) { delay(1200); splash = false }
     if (splash) { Splash(); return }
 
-    var selected by remember { mutableIntStateOf(2) }
+    var selected by remember { mutableIntStateOf(3) }
     var tabHistory by remember { mutableStateOf<List<Int>>(emptyList()) }
     BackHandler(enabled = true) {
         if (tabHistory.isNotEmpty()) {
             selected = tabHistory.last()
             tabHistory = tabHistory.dropLast(1)
-        } else if (selected != 2) {
-            selected = 2
+        } else if (selected != 3) {
+            selected = 3
         }
     }
     Scaffold(bottomBar = { NeonBar(selected) { next ->
@@ -198,9 +240,10 @@ fun OrraApp() {
             Box(Modifier.fillMaxSize().statusBarsPadding()) {
                 if (selected == 0) ChatScreen()
                 else if (selected == 1) CallsScreen()
-                else if (selected == 2) DialerScreen { selected = 0 }
-                else if (selected == 3) ContactsScreen()
-                else if (selected == 4) SettingsScreen()
+                else if (selected == 2) SimCallsScreen()
+                else if (selected == 3) DialerScreen { selected = 0 }
+                else if (selected == 4) ContactsScreen()
+                else if (selected == 5) SettingsScreen()
             }
             Box(
                 modifier = Modifier
@@ -225,7 +268,7 @@ fun OrraApp() {
             title = { Text(if (pendingCall.type == "video") "Incoming ORRA video call" else "Incoming ORRA voice call") },
             text = {
                 Column {
-                    Text("ORRA contact is calling you.")
+                    Text(tr("s_86db8b3b"))
                     if (incomingCallError.isNotBlank()) Text(incomingCallError, color = MaterialTheme.colorScheme.error)
                 }
             },
@@ -242,7 +285,7 @@ fun OrraApp() {
                             incomingCallError = ""
                         }.onFailure { incomingCallError = it.message ?: "Could not answer the call." }
                     }
-                }) { Text("Answer") }
+                }) { Text(tr("s_3751695c")) }
             },
             dismissButton = {
                 TextButton(onClick = {
@@ -253,7 +296,7 @@ fun OrraApp() {
                         result.onSuccess { incomingCall = null; incomingCallError = "" }
                             .onFailure { incomingCallError = it.message ?: "Could not decline the call." }
                     }
-                }) { Text("Decline") }
+                }) { Text(tr("s_0d362728")) }
             }
         )
     }
@@ -265,12 +308,12 @@ private fun NeonBar(selected: Int, onSelect: (Int) -> Unit) {
     Row(
         Modifier
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = 10.dp, vertical = 12.dp)
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f), shape)
             .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), shape)
-            .padding(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+            .padding(5.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         tabs.forEachIndexed { i, t -> NavItem(t, selected == i) { onSelect(i) } }
     }
@@ -290,14 +333,14 @@ private fun RowScope.NavItem(tab: Tab, selected: Boolean, onClick: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(tab.icon, contentDescription = tr("tab_" + tab.label.lowercase()), tint = tint, modifier = Modifier.size(24.dp))
-        Text(tr("tab_" + tab.label.lowercase()), fontSize = 11.sp, color = tint)
+        Icon(tab.icon, contentDescription = tr("tab_" + tab.label.lowercase()), tint = tint, modifier = Modifier.size(22.dp))
+        Text(tr("tab_" + tab.label.lowercase()), fontSize = 9.5.sp, color = tint, maxLines = 1, softWrap = false)
     }
 }
 
 @Composable
 private fun Splash() {
-    Box(Modifier.fillMaxSize().background(Ink), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
         OrraWordmark(Modifier.fillMaxWidth(0.55f), color = Color.White, dot = Mint)
     }
 }

@@ -1,5 +1,6 @@
 package com.orra.app
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import android.Manifest
 import android.app.Activity
 import android.app.role.RoleManager
@@ -113,6 +114,8 @@ fun SettingsScreen() {
         "devices" -> SettingsPage(tr("devices"), back) { DevicesPage() }
         "power" -> SettingsPage(tr("power_saving"), back) { PowerPage() }
         "language" -> SettingsPage(tr("language"), back) { LanguagePage() }
+        "sounds" -> SettingsPage(tr("sounds"), back) { SoundsPage() }
+        "security" -> SettingsPage(tr("security"), back) { SecurityPage() }
         "about" -> SettingsPage(tr("about"), back) { AboutPage() }
         else -> SettingsHome { route = it }
     }
@@ -138,6 +141,10 @@ private fun SettingsHome(open: (String) -> Unit) {
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
         }
         OrraCard {
+            val dark = OrraAppearance.mode.value == "dark" || (OrraAppearance.mode.value == "system" && isSystemInDarkTheme())
+            SwitchRow(tr("dark_mode"), null, dark) { OrraAppearance.setMode(context, if (it) "dark" else "light") }
+        }
+        OrraCard {
             SettingsRow(Icons.Filled.AccountCircle, Color(0xFF2E9BFF), tr("account"), tr("account_sub")) { open("account") }
             SettingsRow(Icons.Filled.ChatBubble, Color(0xFFF59E0B), tr("chat_settings"), tr("chat_settings_sub")) { open("chat") }
             SettingsRow(Icons.Filled.VpnKey, Color(0xFF34C759), tr("privacy_security"), tr("privacy_sub")) { open("privacy") }
@@ -146,6 +153,8 @@ private fun SettingsHome(open: (String) -> Unit) {
             SettingsRow(Icons.Filled.Folder, Color(0xFF2E9BFF), tr("folders"), tr("folders_sub")) { open("folders") }
             SettingsRow(Icons.Filled.Laptop, Color(0xFF14B8A6), tr("devices"), tr("devices_sub")) { open("devices") }
             SettingsRow(Icons.Filled.BatteryChargingFull, Color(0xFFF97316), tr("power_saving"), tr("power_sub")) { open("power") }
+            SettingsRow(Icons.Filled.Notifications, Color(0xFFEC4899), tr("sounds"), tr("sounds_sub")) { open("sounds") }
+            SettingsRow(Icons.Filled.VpnKey, Color(0xFF16A34A), tr("security"), tr("security_sub")) { open("security") }
             SettingsRow(Icons.Filled.Language, Color(0xFF9B6BFF), tr("language"), OrraLang.nativeName(OrraLang.code.value, tr("system_language"))) { open("language") }
         }
         OrraCard {
@@ -235,16 +244,16 @@ fun OrraDeveloperBadge(modifier: Modifier = Modifier) {
             Modifier.clip(shape)
                 .background(Brush.linearGradient(listOf(Color(0xFF05060A), Color(0xFF14172A), Color(0xFF07080E))), shape)
                 .border(1.dp, accent.copy(alpha = 0.45f), shape)
-                .padding(horizontal = 22.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(accent))
+            Box(Modifier.size(6.dp).clip(CircleShape).background(accent))
             BasicText(
-                "Hamoudy Yasser",
+                "HAMOUDY YASSER",
                 style = TextStyle(
                     brush = Brush.horizontalGradient(listOf(accent, Color.White, accent)),
-                    fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, fontWeight = FontWeight.Light,
-                    fontSize = 21.sp, letterSpacing = 1.6.sp
+                    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Light,
+                    fontSize = 11.sp, letterSpacing = 4.sp
                 )
             )
         }
@@ -268,6 +277,8 @@ private fun ChatSettingsPage() {
     SectionTitle(tr("appearance"))
     OrraCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            val darkNow = OrraAppearance.mode.value == "dark" || (OrraAppearance.mode.value == "system" && isSystemInDarkTheme())
+            SwitchRow(tr("dark_mode"), null, darkNow) { OrraAppearance.setMode(context, if (it) "dark" else "light") }
             Text(tr("night_mode"), style = MaterialTheme.typography.labelLarge)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("system" to tr("mode_system"), "dark" to tr("mode_dark"), "light" to tr("mode_light")).forEach { (value, label) ->
@@ -677,6 +688,60 @@ private fun LanguagePage() {
     Note(tr("language_note"))
 }
 
+// ------------------------------------------------------------------ App sounds and security
+
+@Composable
+private fun SoundsPage() {
+    val context = LocalContext.current
+    var rev by remember { mutableIntStateOf(0) }
+    val refresh = rev
+    Note(tr("sfx_note"))
+    OrraCard {
+        SwitchRow(tr("sfx_master"), null, refresh >= 0 && OrraSfx.masterEnabled(context)) { OrraSfx.setMaster(context, it); rev++ }
+    }
+    OrraCard {
+        OrraSfx.events.forEach { event ->
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { Text(tr("sfx_$event")) }
+                TextButton(onClick = {
+                    OrraSfx.init(context)
+                    val was = OrraSfx.enabled(context, event); val wasMaster = OrraSfx.masterEnabled(context)
+                    OrraSfx.setEnabled(context, event, true); OrraSfx.setMaster(context, true)
+                    OrraSfx.play(context, event)
+                    OrraSfx.setEnabled(context, event, was); OrraSfx.setMaster(context, wasMaster)
+                }) { Text(tr("sfx_preview")) }
+                Switch(checked = refresh >= 0 && OrraSfx.enabled(context, event), onCheckedChange = { OrraSfx.setEnabled(context, event, it); rev++ })
+            }
+        }
+    }
+}
+
+@Composable
+private fun SecurityPage() {
+    val context = LocalContext.current
+    var rev by remember { mutableIntStateOf(0) }
+    val refresh = rev
+    var message by remember { mutableStateOf("") }
+    val rooted = remember { OrraSecurity.looksRooted() }
+    OrraCard {
+        SwitchRow(tr("secure_screen"), tr("secure_screen_sub"), OrraSecurity.secureScreen.value) { OrraSecurity.setSecureScreen(context, it) }
+        SwitchRow(tr("app_lock"), tr("app_lock_sub"), refresh >= 0 && OrraSecurity.appLockEnabled(context)) { enable ->
+            if (enable && !OrraSecurity.deviceSecure(context)) message = tr("set_device_lock")
+            else { message = ""; OrraSecurity.setAppLock(context, enable); rev++ }
+        }
+    }
+    if (message.isNotBlank()) Note(message)
+    SectionTitle(tr("device_integrity"))
+    OrraCard {
+        Column(Modifier.padding(16.dp)) {
+            Text(if (rooted) tr("integrity_warn") else tr("integrity_ok"),
+                color = if (rooted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+        }
+    }
+    SectionTitle(tr("protection_active"))
+    Note(tr("protection_list"))
+}
+
 // ------------------------------------------------------------------ About
 
 @Composable
@@ -754,23 +819,23 @@ fun AccountPage() {
                 }
                 Text(displayName.ifBlank { "ORRA account" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(if (username.isNotBlank()) "@$username" else "Set your username and bio", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
-                OutlinedButton(onClick = { showAccountEditor = true }) { Text("Edit account") }
+                OutlinedButton(onClick = { showAccountEditor = true }) { Text(tr("s_2fc1a870")) }
             }
         }
         Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Connection proxy", fontWeight = FontWeight.SemiBold)
-                Text("Routes ORRA's Supabase API requests through this proxy. It does not route Android phone calls or every third-party connection.",
+                Text(tr("s_87dc59ee"), fontWeight = FontWeight.SemiBold)
+                Text(tr("s_41ff4e90"),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Use proxy", modifier = Modifier.weight(1f))
+                    Text(tr("s_c6d33022"), modifier = Modifier.weight(1f))
                     Switch(checked = proxyEnabled, onCheckedChange = { proxyEnabled = it })
                 }
                 OutlinedTextField(value = proxyHost, onValueChange = { proxyHost = it }, modifier = Modifier.fillMaxWidth(),
-                    singleLine = true, label = { Text("Proxy host / IP") })
+                    singleLine = true, label = { Text(tr("s_ba6d4bc8")) })
                 OutlinedTextField(value = proxyPort, onValueChange = { proxyPort = it.filter(Char::isDigit).take(5) },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Port (1–65535)") })
-                Text("Proxy type", style = MaterialTheme.typography.labelLarge)
+                    modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text(tr("s_eb44ac81")) })
+                Text(tr("s_6002ddee"), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (proxyType == "http") Button(onClick = { proxyType = "http" }) { Text("HTTP") }
                     else OutlinedButton(onClick = { proxyType = "http" }) { Text("HTTP") }
@@ -785,7 +850,7 @@ fun AccountPage() {
                         SupabaseChatClient.saveProxy(context, proxyHost, port ?: 0, proxyType, proxyEnabled)
                         proxyStatus = "Proxy settings saved."
                     }
-                }) { Text("Save proxy settings") }
+                }) { Text(tr("s_ee3e8d60")) }
                 OutlinedButton(enabled = !proxyBusy && backupClient != null, modifier = Modifier.fillMaxWidth(), onClick = {
                     val port = proxyPort.toIntOrNull()
                     if (proxyEnabled && (proxyHost.isBlank() || port == null || port !in 1..65535)) {
@@ -802,14 +867,14 @@ fun AccountPage() {
                         }
                     }
                 }) { Text(if (proxyBusy) "Testing…" else "Test connection") }
-                if (backupClient == null) Text("Sign in to test the Supabase connection.", style = MaterialTheme.typography.bodySmall)
+                if (backupClient == null) Text(tr("s_bb5ef909"), style = MaterialTheme.typography.bodySmall)
             }
         }
 
         Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("Account & chat backup", fontWeight = FontWeight.SemiBold)
-                Text("Your ORRA account and chats are stored in the connected server. A private chat snapshot is created daily when you open Chats. Media files remain in the private storage bucket.",
+                Text(tr("s_e9153e53"), fontWeight = FontWeight.SemiBold)
+                Text(tr("s_a9cdaa9f"),
                     style = MaterialTheme.typography.bodySmall)
                 Button(enabled = backupClient != null && !backupBusy, onClick = {
                     scope.launch {
@@ -830,8 +895,8 @@ fun AccountPage() {
                         } catch (e: Exception) { android.util.Log.w("ORRA", "Restore failed", e); "" }
                         backupBusy = false
                     }
-                }, modifier = Modifier.fillMaxWidth()) { Text("Restore latest backup") }
-                if (backupClient == null) Text("Sign in to manage cloud backups.", style = MaterialTheme.typography.bodySmall)
+                }, modifier = Modifier.fillMaxWidth()) { Text(tr("s_bc411b37")) }
+                if (backupClient == null) Text(tr("s_3c661f28"), style = MaterialTheme.typography.bodySmall)
             }
         }
 
@@ -839,9 +904,9 @@ fun AccountPage() {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.Icon(Icons.Default.Lock, contentDescription = null)
-                    Text("  Privacy & permissions", fontWeight = FontWeight.SemiBold)
+                    Text("  " + tr("s_f370c6a0"), fontWeight = FontWeight.SemiBold)
                 }
-                Text("Contacts, camera and microphone permissions are requested only when their features are used. Cellular call controls inside ORRA require setting it as the default phone app.",
+                Text(tr("s_f14d5765"),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f))
                 Text(if (notificationsAllowed) "Notifications permission is enabled." else "Notifications permission is not enabled.",
                     style = MaterialTheme.typography.bodySmall)
@@ -857,13 +922,13 @@ fun AccountPage() {
                         if (manager?.isRoleAvailable(RoleManager.ROLE_DIALER) == true)
                             roleLauncher.launch(manager.createRequestRoleIntent(RoleManager.ROLE_DIALER))
                     } else (context as? Activity)?.let { requestOrraDialerRole(it) }
-                }) { Text("Set ORRA as default phone app") }
+                }) { Text(tr("s_7b10b435")) }
                 OutlinedButton(onClick = {
                     context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                         Uri.fromParts("package", context.packageName, null)))
                 }) {
                     androidx.compose.material3.Icon(Icons.Default.Settings, contentDescription = null)
-                    Text("  App permissions")
+                    Text("  " + tr("s_7fd303ec"))
                 }
                 OutlinedButton(enabled = backupClient != null, onClick = {
                     scope.launch {
@@ -874,7 +939,7 @@ fun AccountPage() {
                             showBlocked = true
                         }.onFailure { android.util.Log.w("ORRA", "Blocked contacts load failed", it); blockedStatus = "" }
                     }
-                }) { Text("Blocked contacts") }
+                }) { Text(tr("s_f6a9223f")) }
 
             }
         }
@@ -884,22 +949,22 @@ fun AccountPage() {
     }
 
     if (showAccountEditor) {
-        AlertDialog(onDismissRequest = { showAccountEditor = false }, title = { Text("Edit profile details") },
+        AlertDialog(onDismissRequest = { showAccountEditor = false }, title = { Text(tr("s_11039552")) },
             text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text("Display name") }, singleLine = true)
-                OutlinedTextField(value = username, onValueChange = { username = it.filter { ch -> ch.isLetterOrDigit() || ch == '_' } }, label = { Text("Username") }, singleLine = true)
-                OutlinedTextField(value = bio, onValueChange = { bio = it.take(160) }, label = { Text("Bio") })
+                OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text(tr("s_bc9e270b")) }, singleLine = true)
+                OutlinedTextField(value = username, onValueChange = { username = it.filter { ch -> ch.isLetterOrDigit() || ch == '_' } }, label = { Text(tr("s_f6039d44")) }, singleLine = true)
+                OutlinedTextField(value = bio, onValueChange = { bio = it.take(160) }, label = { Text(tr("s_713a01ab")) })
             } },
-            confirmButton = { TextButton(onClick = { prefs.edit().putString("profile_display_name", displayName).putString("profile_username", username).putString("profile_bio", bio).apply(); showAccountEditor = false }) { Text("Save") } },
-            dismissButton = { TextButton(onClick = { showAccountEditor = false }) { Text("Cancel") } })
+            confirmButton = { TextButton(onClick = { prefs.edit().putString("profile_display_name", displayName).putString("profile_username", username).putString("profile_bio", bio).apply(); showAccountEditor = false }) { Text(tr("s_c9cc8cce")) } },
+            dismissButton = { TextButton(onClick = { showAccountEditor = false }) { Text(tr("s_ea478870")) } })
     }
     if (showBlocked) {
         AlertDialog(
             onDismissRequest = { showBlocked = false },
-            title = { Text("Blocked contacts") },
+            title = { Text(tr("s_f6a9223f")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (blockedUsers.isEmpty()) Text("You have not blocked anyone.")
+                    if (blockedUsers.isEmpty()) Text(tr("s_a3d465f7"))
                     blockedUsers.forEach { blocked ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("@${blocked.username}", modifier = Modifier.weight(1f))
@@ -910,12 +975,12 @@ fun AccountPage() {
                                         blockedUsers = blockedUsers.filterNot { it.id == blocked.id }
                                     }.onFailure { android.util.Log.w("ORRA", "Unblock failed", it); blockedStatus = "" }
                                 }
-                            }) { Text("Unblock") }
+                            }) { Text(tr("s_193cb08a")) }
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showBlocked = false }) { Text("Close") } }
+            confirmButton = { TextButton(onClick = { showBlocked = false }) { Text(tr("s_d3d2e617")) } }
         )
     }
 }

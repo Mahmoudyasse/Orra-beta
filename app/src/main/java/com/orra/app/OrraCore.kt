@@ -76,6 +76,7 @@ object OrraLocks {
         return ok
     }
     fun isUnlocked(key: String): Boolean = unlocked.contains(key)
+    fun removeAll(context: Context) { sp(context).edit().clear().apply(); unlocked.clear(); version.intValue++ }
     fun lockAll() { unlocked.clear(); version.intValue++ }
     // Chat helpers
     fun chatKey(conversationId: String) = "chat:$conversationId"
@@ -443,4 +444,88 @@ object OrraSessionGuard {
         val token = OrraPrefs.get(context).getString("fcm_token", null) ?: return
         runCatching { client.savePushToken(context, token) }.onFailure { Log.w("ORRA", "Push token upload failed", it) }
     }
+}
+
+object OrraNet {
+    fun isOnline(context: Context): Boolean {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val network = manager.activeNetwork ?: return false
+        val caps = manager.getNetworkCapabilities(network) ?: return false
+        return caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+}
+
+/** Refreshes the saved Supabase session. Returns true when a new access token was stored. */
+fun orraRefreshSession(context: Context): Boolean {
+    val prefs = OrraPrefs.get(context)
+    val refresh = prefs.getString("refresh_token", "").orEmpty()
+    if (refresh.isBlank()) return false
+    return runCatching {
+        val client = SupabaseChatClient(context.applicationContext,
+            prefs.getString("url", SupabaseChatClient.DEFAULT_PROJECT_URL).orEmpty(),
+            prefs.getString("key", SupabaseChatClient.DEFAULT_PUBLISHABLE_KEY).orEmpty())
+        val result = client.refreshSession(refresh)
+        val access = result.optString("access_token")
+        if (access.isBlank()) false else {
+            SupabaseChatClient.saveSession(context, access, prefs.getString("user_id", "").orEmpty(),
+                prefs.getString("username", "").orEmpty(), result.optString("refresh_token").ifBlank { refresh }, result.optLong("expires_in", 3600L))
+            true
+        }
+    }.getOrDefault(false)
+}
+
+object OrraSfx {
+    val events = listOf("tap", "send", "receive", "call_start", "call_end", "error")
+    private var pool: android.media.SoundPool? = null
+    private val ids = mutableMapOf<String, Int>()
+    fun masterEnabled(context: Context) = OrraPrefs.get(context).getBoolean("sfx_master", true)
+    fun setMaster(context: Context, value: Boolean) { OrraPrefs.get(context).edit().putBoolean("sfx_master", value).apply() }
+    fun enabled(context: Context, event: String) = OrraPrefs.get(context).getBoolean("sfx_$event", event != "tap")
+    fun setEnabled(context: Context, event: String, value: Boolean) { OrraPrefs.get(context).edit().putBoolean("sfx_$event", value).apply() }
+    fun init(context: Context) {
+        if (pool != null) return
+        val app = context.applicationContext
+        val p = android.media.SoundPool.Builder().setMaxStreams(4).setAudioAttributes(
+            AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()).build()
+        ids["tap"] = p.load(app, R.raw.orra_sfx_tap, 1)
+        ids["send"] = p.load(app, R.raw.orra_sfx_send, 1)
+        ids["receive"] = p.load(app, R.raw.orra_sfx_receive, 1)
+        ids["call_start"] = p.load(app, R.raw.orra_sfx_call_start, 1)
+        ids["call_end"] = p.load(app, R.raw.orra_sfx_call_end, 1)
+        ids["error"] = p.load(app, R.raw.orra_sfx_error, 1)
+        pool = p
+    }
+    fun play(context: Context, event: String) {
+        if (!masterEnabled(context) || !enabled(context, event)) return
+        init(context)
+        ids[event]?.let { pool?.play(it, 0.7f, 0.7f, 1, 0, 1f) }
+    }
+}
+
+object OrraSecurity {
+    val secureScreen = mutableStateOf(false)
+    val locked = mutableStateOf(false)
+    var lastStopAt = 0L
+    fun load(context: Context) {
+        val p = OrraPrefs.get(context)
+        secureScreen.value = p.getBoolean("secure_screen", false)
+        locked.value = p.getBoolean("app_lock", false) && deviceSecure(context)
+    }
+    fun deviceSecure(context: Context): Boolean =
+        context.getSystemService(android.app.KeyguardManager::class.java)?.isDeviceSecure == true
+    fun setSecureScreen(context: Context, value: Boolean) {
+        OrraPrefs.get(context).edit().putBoolean("secure_screen", value).apply(); secureScreen.value = value
+    }
+    fun appLockEnabled(context: Context) = OrraPrefs.get(context).getBoolean("app_lock", false)
+    fun setAppLock(context: Context, value: Boolean) { OrraPrefs.get(context).edit().putBoolean("app_lock", value).apply() }
+    fun looksRooted(): Boolean {
+        if (Build.TAGS?.contains("test-keys") == true) return true
+        return listOf("/system/app/Superuser.apk", "/sbin/su", "/system/bin/su", "/system/xbin/su", "/data/local/xbin/su",
+            "/data/local/bin/su", "/system/sd/xbin/su", "/data/local/su", "/su/bin/su").any { File(it).exists() }
+    }
+    fun credentialIntent(context: Context): Intent? =
+        context.getSystemService(android.app.KeyguardManager::class.java)
+            ?.takeIf { it.isDeviceSecure }?.createConfirmDeviceCredentialIntent("ORRA", "Unlock ORRA")
 }

@@ -108,13 +108,13 @@ fun DialerScreen(onOpenChat: () -> Unit = {}) {
                 OrraPendingChat.userId = orraAccount!!.id
                 OrraPendingChat.username = orraAccount!!.username
                 onOpenChat()
-            }, modifier = Modifier.fillMaxWidth()) { Text("Open ORRA chat") }
+            }, modifier = Modifier.fillMaxWidth()) { Text(tr("s_d1bdee37")) }
         }
         if (number.isNotBlank()) {
             TextButton(onClick = {
                 val sms = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(number)))
                 runCatching { ctx.startActivity(sms) }
-            }) { Text("Send SMS") }
+            }) { Text(tr("s_a76483d7")) }
         }
         Spacer(Modifier.height(16.dp))
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {

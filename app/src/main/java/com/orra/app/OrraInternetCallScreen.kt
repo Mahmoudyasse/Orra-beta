@@ -132,6 +132,14 @@ fun OrraInternetCallScreen() {
             }
         }
     }
+    androidx.compose.runtime.DisposableEffect(callId, status) {
+        var tone: android.media.ToneGenerator? = null
+        if (caller && status.startsWith("Calling")) {
+            tone = runCatching { android.media.ToneGenerator(AudioManager.STREAM_VOICE_CALL, 70) }.getOrNull()
+            tone?.startTone(android.media.ToneGenerator.TONE_SUP_RINGTONE)
+        }
+        onDispose { runCatching { tone?.stopTone() }; runCatching { tone?.release() } }
+    }
     val localRenderer = remember(callId) { SurfaceViewRenderer(context) }
     val remoteRenderer = remember(callId) { SurfaceViewRenderer(context) }
     var engine by remember(callId) { mutableStateOf<OrraWebRtcEngine?>(null) }
@@ -252,7 +260,7 @@ fun OrraInternetCallScreen() {
             Spacer(Modifier.height(30.dp))
             Surface(Modifier.size(132.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {}
         }
-        OutlinedButton(onClick = { showCallChat = true }) { Text("Messages during call") }
+        OutlinedButton(onClick = { showCallChat = true }) { Text(tr("s_c29dcb0f")) }
         if (error.isNotBlank()) {
             Spacer(Modifier.height(12.dp))
             Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -262,7 +270,7 @@ fun OrraInternetCallScreen() {
             Button(onClick = {
                 permissionLauncher.launch(if (video) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
                     else arrayOf(Manifest.permission.RECORD_AUDIO))
-            }) { Text("Allow microphone and camera") }
+            }) { Text(tr("s_aedf5ae0")) }
         } else {
             Spacer(Modifier.height(24.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -289,12 +297,12 @@ fun OrraInternetCallScreen() {
                 }
                 if (OrraInternetCallState.callId == callId) OrraInternetCallState.clear()
             }
-        }) { Text("End call") }
+        }) { Text(tr("s_033b86a7")) }
     }
     if (showCallChat) {
         AlertDialog(
             onDismissRequest = { showCallChat = false },
-            title = { Text("ORRA chat during call") },
+            title = { Text(tr("s_1e490863")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (callChatError.isNotBlank()) Text(callChatError, color = MaterialTheme.colorScheme.error)
@@ -306,7 +314,7 @@ fun OrraInternetCallScreen() {
                         value = callMessageText,
                         onValueChange = { callMessageText = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Message") },
+                        label = { Text(tr("s_4c2a8fe7")) },
                         maxLines = 3
                     )
                 }
@@ -325,9 +333,9 @@ fun OrraInternetCallScreen() {
                                 callChatError = e.message ?: "Message could not be sent."
                             }
                         }
-                    }) { Text("Send") }
+                    }) { Text(tr("s_94966d90")) }
             },
-            dismissButton = { TextButton(onClick = { showCallChat = false }) { Text("Close") } }
+            dismissButton = { TextButton(onClick = { showCallChat = false }) { Text(tr("s_d3d2e617")) } }
         )
     }
 }

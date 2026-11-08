@@ -34,6 +34,23 @@ fun OrraUnlockDialog(title: String, lockKey: String, onDismiss: () -> Unit, onUn
     val context = LocalContext.current
     var password by remember { mutableStateOf("") }
     var wrong by remember { mutableStateOf(false) }
+    var confirmReset by remember { mutableStateOf(false) }
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text(tr("forgot_reset_title")) },
+            text = { Text(tr("forgot_reset_body")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    OrraLocks.removeAll(context)
+                    SupabaseChatClient.clearSession(context)
+                    (context as? android.app.Activity)?.recreate()
+                    onDismiss()
+                }) { Text(tr("reset_and_sign_out")) }
+            },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text(tr("cancel")) } }
+        )
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -42,6 +59,7 @@ fun OrraUnlockDialog(title: String, lockKey: String, onDismiss: () -> Unit, onUn
                 OutlinedTextField(password, { password = it; wrong = false }, singleLine = true, isError = wrong,
                     label = { Text(tr("password")) }, visualTransformation = PasswordVisualTransformation())
                 if (wrong) Text(tr("wrong_password"), color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = { confirmReset = true }) { Text(tr("forgot_password")) }
             }
         },
         confirmButton = { TextButton(onClick = { if (OrraLocks.verify(context, lockKey, password)) onUnlocked() else wrong = true }) { Text(tr("unlock")) } },

@@ -131,3 +131,39 @@ grant execute on function public.orra_push_targets_for_user(uuid) to service_rol
 -- table public.orra_call_sessions (INSERT), both POST to
 --   https://<project-ref>.supabase.co/functions/v1/orra-push-send
 -- with HTTP header  x-orra-push-secret: <same value as the ORRA_PUSH_SECRET secret>.
+
+-- ===================== Photos and videos that open once or twice =====================
+-- The app marks limited media by prefixing the message body with "orra:viewN:".
+create table if not exists public.message_views (
+  message_id uuid not null references public.messages(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  views integer not null default 0,
+  primary key (message_id, user_id)
+);
+alter table public.message_views enable row level security;
+drop policy if exists "message_views_select_own" on public.message_views;
+create policy "message_views_select_own" on public.message_views
+  for select to authenticated using (auth.uid() = user_id);
+grant select on public.message_views to authenticated;
+
+-- Returns -1 (unlimited), -2 (no views left) or the number of views remaining.
+create or replace function public.consume_media_view(p_message uuid)
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  v_body text; v_conv uuid; v_sender uuid; v_limit integer := 0; v_views integer;
+begin
+  select body, conversation_id, sender_id into v_body, v_conv, v_sender from public.messages where id = p_message;
+  if v_conv is null or not exists (
+    select 1 from public.conversation_members where conversation_id = v_conv and user_id = auth.uid()
+  ) then raise exception 'not allowed'; end if;
+  v_limit := coalesce(nullif(substring(v_body from '^orra:view([0-9]+):'), '')::integer, 0);
+  if v_limit = 0 or v_sender = auth.uid() then return -1; end if;
+  insert into public.message_views(message_id, user_id, views) values (p_message, auth.uid(), 1)
+    on conflict (message_id, user_id) do update set views = public.message_views.views + 1
+    where public.message_views.views < v_limit
+    returning views into v_views;
+  if v_views is null then return -2; end if;
+  return v_limit - v_views;
+end $$;
+revoke all on function public.consume_media_view(uuid) from public, anon;
+grant execute on function public.consume_media_view(uuid) to authenticated;
