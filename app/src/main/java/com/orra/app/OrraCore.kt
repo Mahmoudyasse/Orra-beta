@@ -529,3 +529,10 @@ object OrraSecurity {
         context.getSystemService(android.app.KeyguardManager::class.java)
             ?.takeIf { it.isDeviceSecure }?.createConfirmDeviceCredentialIntent("ORRA", "Unlock ORRA")
 }
+
+/** Lets any screen jump to a page inside the Settings tab. */
+object OrraNav {
+    val tab = mutableStateOf<Int?>(null)
+    val settingsRoute = mutableStateOf<String?>(null)
+    fun openSettings(route: String) { settingsRoute.value = route; tab.value = 5 }
+}

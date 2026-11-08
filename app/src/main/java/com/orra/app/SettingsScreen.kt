@@ -101,7 +101,8 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen() {
-    var route by remember { mutableStateOf("home") }
+    var route by remember { mutableStateOf(OrraNav.settingsRoute.value ?: "home") }
+    LaunchedEffect(OrraNav.settingsRoute.value) { OrraNav.settingsRoute.value?.let { route = it; OrraNav.settingsRoute.value = null } }
     BackHandler(enabled = route != "home") { route = "home" }
     val back = { route = "home" }
     when (route) {

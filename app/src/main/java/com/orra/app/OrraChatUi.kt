@@ -1,5 +1,14 @@
 package com.orra.app
 
+import androidx.compose.material.icons.filled.Laptop
+import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Search
 import android.app.DownloadManager
 import android.content.Context
@@ -321,4 +330,50 @@ fun OrraSearchPill(value: String, onChange: (String) -> Unit, hint: String) {
             )
         }
     }
+}
+
+private data class MenuEntry(val route: String, val icon: ImageVector, val title: String, val sub: String?)
+
+/** Profile header followed by the settings pages, listed one under another inside the 3-dot menu. */
+@Composable
+fun OrraSettingsMenu(name: String, phone: String, onProfile: () -> Unit, onOpen: (String) -> Unit) {
+    val entries = listOf(
+        MenuEntry("devices", androidx.compose.material.icons.Icons.Default.Laptop, "devices", "devices_sub"),
+        MenuEntry("account", androidx.compose.material.icons.Icons.Default.VpnKey, "account", "account_sub"),
+        MenuEntry("privacy", androidx.compose.material.icons.Icons.Default.Lock, "privacy_security", "privacy_sub"),
+        MenuEntry("folders", androidx.compose.material.icons.Icons.Default.Folder, "folders", "folders_sub"),
+        MenuEntry("chat", androidx.compose.material.icons.Icons.Default.ChatBubble, "chat_settings", "chat_settings_sub"),
+        MenuEntry("notifications", Icons.Default.Notifications, "notifications", "notifications_sub"),
+        MenuEntry("data", androidx.compose.material.icons.Icons.Default.PieChart, "data_storage", "data_sub"),
+        MenuEntry("sounds", Icons.Default.MusicNote, "sounds", "sounds_sub"),
+        MenuEntry("power", androidx.compose.material.icons.Icons.Default.BatteryChargingFull, "power_saving", "power_sub"),
+        MenuEntry("security", androidx.compose.material.icons.Icons.Default.Security, "security", "security_sub"),
+        MenuEntry("language", androidx.compose.material.icons.Icons.Default.Language, "language", null)
+    )
+    DropdownMenuItem(
+        text = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OrraAvatar(name, null, 42.dp)
+                Column(Modifier.padding(start = 12.dp)) {
+                    Text(name, fontWeight = FontWeight.Bold)
+                    if (phone.isNotBlank()) Text(phone, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+                }
+            }
+        },
+        onClick = onProfile
+    )
+    androidx.compose.material3.HorizontalDivider()
+    entries.forEach { entry ->
+        DropdownMenuItem(
+            text = {
+                Column {
+                    Text(tr(entry.title))
+                    if (entry.sub != null) Text(tr(entry.sub), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                }
+            },
+            leadingIcon = { Icon(entry.icon, contentDescription = null) },
+            onClick = { onOpen(entry.route) }
+        )
+    }
+    androidx.compose.material3.HorizontalDivider()
 }

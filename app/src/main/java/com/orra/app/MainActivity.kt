@@ -224,6 +224,7 @@ fun OrraApp() {
     if (splash) { Splash(); return }
 
     var selected by remember { mutableIntStateOf(3) }
+    LaunchedEffect(OrraNav.tab.value) { OrraNav.tab.value?.let { selected = it; OrraNav.tab.value = null } }
     var tabHistory by remember { mutableStateOf<List<Int>>(emptyList()) }
     BackHandler(enabled = true) {
         if (tabHistory.isNotEmpty()) {
@@ -241,7 +242,7 @@ fun OrraApp() {
                 if (selected == 0) ChatScreen()
                 else if (selected == 1) CallsScreen()
                 else if (selected == 2) SimCallsScreen()
-                else if (selected == 3) DialerScreen { selected = 0 }
+                else if (selected == 3) CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) { DialerScreen { selected = 0 } }
                 else if (selected == 4) ContactsScreen()
                 else if (selected == 5) SettingsScreen()
             }

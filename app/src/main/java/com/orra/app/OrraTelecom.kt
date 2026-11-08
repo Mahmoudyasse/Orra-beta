@@ -117,9 +117,7 @@ fun rememberOrraCallAction(video: Boolean = false): (String, String) -> Unit {
 
     val start: (String, String) -> Unit = { name, number ->
         if (number.isNotBlank()) {
-            if (!isOrraDefaultDialer(context)) {
-                Toast.makeText(context, "Set ORRA as the default phone app in Settings first.", Toast.LENGTH_LONG).show()
-            } else {
+            run {
                 val request = Triple(name, number, video)
                 val missing = buildList {
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED)

@@ -1,5 +1,6 @@
 package com.orra.app
 
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.material.icons.filled.MoreVert
@@ -209,6 +210,7 @@ fun ChatScreen() {
     var lockTarget by remember { mutableStateOf<OrraChatConversation?>(null) }
     var folderUnlockTarget by remember { mutableStateOf<OrraFolder?>(null) }
     var showListMenu by remember { mutableStateOf(false) }
+    var showNewChat by remember { mutableStateOf(false) }
     var showFind by remember { mutableStateOf(false) }
     var showEmoji by remember { mutableStateOf(false) }
     var showWallpaper by remember { mutableStateOf(false) }
@@ -505,9 +507,11 @@ fun ChatScreen() {
 
     LaunchedEffect(token, refreshToken, client) {
         if (signedIn && client != null && refreshToken.isNotBlank()) {
+            var firstRefresh = true
             while (true) {
                 val expiresAt = prefs.getLong("expires_at", System.currentTimeMillis() + 3600000L)
-                val waitMillis = (expiresAt - System.currentTimeMillis() - 300000L).coerceAtLeast(30000L)
+                val waitMillis = (expiresAt - System.currentTimeMillis() - 300000L).coerceAtLeast(if (firstRefresh) 0L else 30000L)
+                firstRefresh = false
                 delay(waitMillis)
                 try {
                     val refreshed = withContext(Dispatchers.IO) { client.refreshSession(refreshToken) }
@@ -520,6 +524,12 @@ fun ChatScreen() {
                     refreshToken = nextRefresh
                 } catch (e: Exception) {
                     android.util.Log.w("ORRA", "Session refresh failed", e)
+                    if (OrraNet.isOnline(context)) {
+                        SupabaseChatClient.clearSession(context)
+                        token = ""; refreshToken = ""; userId = ""; username = ""
+                        conversations = emptyList(); selected = null
+                        error = tr("session_expired")
+                    }
                     break
                 }
             }
@@ -871,12 +881,16 @@ fun ChatScreen() {
                     Text("ORRA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Text("@$username", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                IconButton(onClick = { showNewChat = true }) { Icon(Icons.Default.Edit, contentDescription = tr("new_chat_title")) }
                 IconButton(onClick = { showFind = !showFind }) { Icon(Icons.Default.Search, contentDescription = tr("find_people")) }
                 Box {
                     IconButton(onClick = { showListMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = tr("more_options")) }
                     DropdownMenu(expanded = showListMenu, onDismissRequest = { showListMenu = false }) {
-                        DropdownMenuItem(text = { Text(tr("menu_profile")) }, leadingIcon = { Icon(Icons.Default.Person, null) },
-                            onClick = { showListMenu = false; showProfile = true })
+                        OrraSettingsMenu(
+                            name = displayName.ifBlank { username }, phone = phoneNumber,
+                            onProfile = { showListMenu = false; showProfile = true },
+                            onOpen = { route -> showListMenu = false; OrraNav.openSettings(route) }
+                        )
                         DropdownMenuItem(text = { Text(tr("menu_new_group")) }, leadingIcon = { Icon(Icons.Default.GroupAdd, null) },
                             onClick = { showListMenu = false; showGroup = true; addingToGroup = null; selectedUsers = emptySet() })
                         DropdownMenuItem(text = { Text(if (dndEnabled) tr("menu_dnd_off") else tr("menu_dnd_on")) }, leadingIcon = { Icon(Icons.Default.Notifications, null) },
@@ -1187,7 +1201,8 @@ fun ChatScreen() {
                                 android.util.Log.w("ORRA", "Message send failed", e)
                                 var failure: Exception? = e
                                 if (!OrraNet.isOnline(context)) failure = IllegalStateException(tr("no_internet"))
-                                else if (e.message.orEmpty().contains("session or permissions", ignoreCase = true) && refreshToken.isNotBlank()) {
+                                else if ((e.message.orEmpty().contains("session or permissions", ignoreCase = true) || e.message.orEmpty().contains("HTTP 401") ||
+                                        e.message.orEmpty().contains("sign in", ignoreCase = true)) && refreshToken.isNotBlank()) {
                                     val refreshedOk = withContext(Dispatchers.IO) { orraRefreshSession(context) }
                                     if (refreshedOk) {
                                         token = prefs.getString("token", "").orEmpty()
@@ -1200,6 +1215,7 @@ fun ChatScreen() {
                                             }
                                             null
                                         } catch (e2: Exception) { e2 }
+                                        if (failure != null && failure!!.message.orEmpty().contains("HTTP 401")) failure = IllegalStateException(tr("session_expired"))
                                         if (failure == null && retry != null) {
                                             messages = withContext(Dispatchers.IO) { if (active.isAi) retry.loadOrraAiMessages() else retry.loadMessages(active.id) }
                                         }
@@ -1320,6 +1336,48 @@ fun ChatScreen() {
                 }) { Text(tr("delete"), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { confirmDeleteChat = false }) { Text(tr("cancel")) } }
+        )
+    }
+
+    if (showNewChat) {
+        var newPhone by remember { mutableStateOf("") }
+        var notFound by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { showNewChat = false },
+            title = { Text(tr("new_chat_title")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(tr("new_chat_sub"), style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(newPhone, { newPhone = it; notFound = false }, singleLine = true, label = { Text(tr("phone_number")) },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone))
+                    if (notFound) {
+                        Text(tr("new_chat_not_found"), color = MaterialTheme.colorScheme.error)
+                        TextButton(onClick = {
+                            runCatching {
+                                context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + newPhone.trim()))
+                                    .putExtra("sms_body", tr("share_text") + " https://github.com/Mahmoudyasse/Orra-beta"))
+                            }
+                        }) { Text(tr("invite_sms")) }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = newPhone.isNotBlank() && !busy, onClick = {
+                    runTask {
+                        val found = withContext(Dispatchers.IO) { client!!.searchUsersByPhone(newPhone) }
+                        if (found == null) notFound = true
+                        else {
+                            val id = withContext(Dispatchers.IO) { client!!.createConversation(found.id) }
+                            val all = withContext(Dispatchers.IO) { client!!.loadConversations() }
+                            conversations = all
+                            selected = all.firstOrNull { it.id == id } ?: OrraChatConversation(id, found.username, "", false, 2, found.id)
+                            messages = emptyList()
+                            showNewChat = false
+                        }
+                    }
+                }) { Text(tr("new_chat_open")) }
+            },
+            dismissButton = { TextButton(onClick = { showNewChat = false }) { Text(tr("cancel")) } }
         )
     }
 
