@@ -179,7 +179,7 @@ fun OrraComposerBar(
             }
         }
         Surface(
-            Modifier.size(52.dp), shape = CircleShape, enabled = !busy || recording,
+            modifier = Modifier.size(52.dp), shape = CircleShape, enabled = !busy || recording,
             color = if (recording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
             onClick = { if (hasText) onSend() else onMic() }
         ) {
