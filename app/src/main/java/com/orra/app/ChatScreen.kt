@@ -970,7 +970,7 @@ fun ChatScreen() {
                             (conversationSearch.isBlank() || conversation.username.contains(conversationSearch, ignoreCase = true) ||
                                 conversation.lastMessage.contains(conversationSearch, ignoreCase = true))
                     }, key = { it.id }) { conversation ->
-                        val presence = presenceByUser[conversation.peerUserId]
+                        val presence = conversation.peerUserId?.let { presenceByUser[it] }
                         OrraChatRow(conversation.username, conversation.lastMessage, presence?.online == true && presence.dnd != true,
                             OrraLocks.isChatLocked(context, conversation.id), conversation.isGroup) {
                             if (OrraLocks.isChatLocked(context, conversation.id)) lockTarget = conversation
@@ -980,7 +980,6 @@ fun ChatScreen() {
                 }
             }
         } else {
-            val peerPresence = if (selected!!.isGroup || selected!!.isAi) null else presenceByUser[selected!!.peerUserId]
             val headerStatus = when {
                 selected!!.isAi -> "AI assistant • Ready"
                 selected!!.isGroup -> selected!!.memberCount.toString() + " " + tr("members")
