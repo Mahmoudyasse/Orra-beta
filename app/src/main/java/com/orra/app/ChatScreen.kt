@@ -1,5 +1,7 @@
 package com.orra.app
 
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -221,6 +223,9 @@ fun ChatScreen() {
     val expiredViews = remember { mutableStateListOf<String>() }
     var lastSeenId by remember { mutableStateOf<String?>(null) }
     var cameraFile by remember { mutableStateOf<File?>(null) }
+    var recordSeconds by remember { mutableIntStateOf(0) }
+    var cancelVoice by remember { mutableStateOf(false) }
+    var peerProfile by remember { mutableStateOf<OrraChatProfile?>(null) }
     var presenceByUser by remember { mutableStateOf<Map<String, OrraUserPresence>>(emptyMap()) }
     var activePeerPresence by remember { mutableStateOf<OrraUserPresence?>(null) }
     var dndEnabled by remember { mutableStateOf(prefs.getBoolean("orra_dnd_enabled", false)) }
@@ -486,7 +491,7 @@ fun ChatScreen() {
                 recorder.start(
                     onComplete = { file ->
                         recording = false
-                        scope.launch {
+                        if (cancelVoice) { cancelVoice = false; file.delete(); voiceStatus = tr("recording_cancelled") } else scope.launch {
                             runCatching {
                                 val path = withContext(Dispatchers.IO) {
                                     api.uploadMedia("orra-chat-media", file,
@@ -676,6 +681,16 @@ fun ChatScreen() {
     }
 
     LaunchedEffect(selected?.id) { lastSeenId = null }
+    LaunchedEffect(recording) {
+        if (recording) { recordSeconds = 0; while (true) { delay(1000); recordSeconds++ } }
+    }
+    LaunchedEffect(selected?.peerUserId, client) {
+        peerProfile = null
+        val peer = selected?.peerUserId
+        if (peer != null && client != null && selected?.isGroup != true && selected?.isAi != true) {
+            peerProfile = runCatching { withContext(Dispatchers.IO) { client.loadPublicProfile(peer) } }.getOrNull()
+        }
+    }
     LaunchedEffect(messages) {
         val last = messages.lastOrNull()
         if (last != null && lastSeenId != null && last.id != lastSeenId && last.senderId != userId) OrraSfx.play(context, "receive")
@@ -1005,6 +1020,7 @@ fun ChatScreen() {
             fun startOrraCall(type: String) {
                 val peerId = selected!!.peerUserId
                 if (peerId.isNullOrBlank()) error = "This ORRA user ID is unavailable."
+                else if (OrraParental.blockCalls(context)) error = tr("parental_blocked")
                 else if (!OrraNet.isOnline(context)) { error = tr("no_internet"); OrraSfx.play(context, "error") }
                 else runTask {
                     val created = withContext(Dispatchers.IO) { OrraCallSignaling(context, userId, token).createCall(peerId, type) }
@@ -1024,7 +1040,7 @@ fun ChatScreen() {
             OrraChatTopBar(
                 title = selected!!.username, status = headerStatus,
                 statusColor = if (activePeerPresence?.online == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                avatarUrl = null,
+                avatarUrl = peerProfile?.avatarUrl,
                 onBack = { selected = null; messages = emptyList(); error = ""; showEmoji = false },
                 onOpenProfile = { if (!selected!!.isAi) showPeerProfile = true },
                 onCall = if (selected!!.isAi) null else ({ startOrraCall("audio") }),
@@ -1165,7 +1181,8 @@ fun ChatScreen() {
                 }
             }
             if (showEmoji) OrraEmojiPanel { messageText += it }
-            OrraComposerBar(
+            if (recording) OrraRecordingBar(recordSeconds, onCancel = { cancelVoice = true; recorder.stop() },
+                onSend = { recorder.stop(); voiceStatus = "Finishing voice message…" }) else OrraComposerBar(
                 text = messageText, onText = { messageText = it },
                 hint = if (selected!!.isAi) "Message ORRA AI…" else tr("hint_message"),
                 canAttach = !selected!!.isAi, recording = recording, busy = busy,
@@ -1241,10 +1258,11 @@ fun ChatScreen() {
     if (showAttachmentMenu) {
         OrraAttachSheet(
             viewLimit = viewLimit, onViewLimit = { viewLimit = it }, onDismiss = { showAttachmentMenu = false },
-            onGallery = { showAttachmentMenu = false; galleryPicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
+            onGallery = { showAttachmentMenu = false; if (OrraParental.blockMedia(context)) error = tr("parental_blocked") else galleryPicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
             onCamera = {
                 showAttachmentMenu = false
-                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) launchCamera()
+                if (OrraParental.blockMedia(context)) error = tr("parental_blocked")
+                else if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) launchCamera()
                 else cameraPermission.launch(Manifest.permission.CAMERA)
             },
             onFile = { showAttachmentMenu = false; documentPicker.launch(arrayOf("*/*")) },
@@ -1262,7 +1280,9 @@ fun ChatScreen() {
             name = selected!!.username,
             status = if (selected!!.isGroup) selected!!.memberCount.toString() + " " + tr("members")
                 else if (activePeerPresence?.online == true) tr("online_now") else tr("offline"),
-            phone = selected!!.peerPhone, muted = muted, canCall = !selected!!.isGroup && !selected!!.isAi,
+            phone = peerProfile?.phoneNumber?.takeIf { it.isNotBlank() } ?: selected!!.peerPhone, muted = muted, canCall = !selected!!.isGroup && !selected!!.isAi,
+            avatarUrl = peerProfile?.avatarUrl, coverUrl = peerProfile?.coverUrl, bio = peerProfile?.bio.orEmpty(),
+            username = peerProfile?.username.orEmpty(), userId = selected!!.peerUserId,
             onDismiss = { showPeerProfile = false }, onMessage = { showPeerProfile = false },
             onToggleMute = {
                 val next = !muted
@@ -1276,7 +1296,8 @@ fun ChatScreen() {
                 showPeerProfile = false
                 val peerId = selected!!.peerUserId
                 if (!peerId.isNullOrBlank()) {
-                    if (!OrraNet.isOnline(context)) error = tr("no_internet")
+                    if (OrraParental.blockCalls(context)) error = tr("parental_blocked")
+                    else if (!OrraNet.isOnline(context)) error = tr("no_internet")
                     else runTask {
                         val created = withContext(Dispatchers.IO) { OrraCallSignaling(context, userId, token).createCall(peerId, "audio") }
                         OrraInternetCallState.begin(created, selected!!.username, true, userId, token)
@@ -1287,7 +1308,8 @@ fun ChatScreen() {
                 showPeerProfile = false
                 val peerId = selected!!.peerUserId
                 if (!peerId.isNullOrBlank()) {
-                    if (!OrraNet.isOnline(context)) error = tr("no_internet")
+                    if (OrraParental.blockCalls(context)) error = tr("parental_blocked")
+                    else if (!OrraNet.isOnline(context)) error = tr("no_internet")
                     else runTask {
                         val created = withContext(Dispatchers.IO) { OrraCallSignaling(context, userId, token).createCall(peerId, "video") }
                         OrraInternetCallState.begin(created, selected!!.username, true, userId, token)
@@ -1421,8 +1443,34 @@ fun ChatScreen() {
     }
 
     if (showProfile) {
-        AlertDialog(
+        OrraFullScreenDialog(
             onDismissRequest = { showProfile = false },
+            header = {
+                Box(Modifier.fillMaxWidth().height(230.dp)) {
+                    if (!coverPreview.isNullOrBlank()) AsyncImage(coverPreview, null, Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(20.dp)),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                    else Surface(modifier = Modifier.fillMaxWidth().height(170.dp), shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceVariant) {}
+                    Surface(onClick = { coverPicker.launch("image/*") }, modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
+                        shape = RoundedCornerShape(20.dp), color = Color.Black.copy(alpha = 0.55f)) {
+                        Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Photo, null, tint = Color.White)
+                            Text("  " + tr("profile_edit_cover"), color = Color.White, fontSize = 12.sp)
+                        }
+                    }
+                    Box(Modifier.align(Alignment.BottomCenter)) {
+                        if (!avatarPreview.isNullOrBlank()) AsyncImage(avatarPreview, null, Modifier.size(120.dp).clip(CircleShape), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                        else OrraAvatar(displayName.ifBlank { username }, null, 120.dp)
+                        Surface(onClick = { avatarPicker.launch("image/*") }, modifier = Modifier.align(Alignment.BottomEnd).size(38.dp),
+                            shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
+                            Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.PhotoCamera, null, tint = MaterialTheme.colorScheme.onPrimary) }
+                        }
+                    }
+                }
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(displayName.ifBlank { username }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("@" + username, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
             title = { Text(tr("s_9965e37a")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {

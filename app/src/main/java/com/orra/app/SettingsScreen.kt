@@ -1,5 +1,10 @@
 package com.orra.app
 
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.FamilyRestroom
+import androidx.compose.material.icons.filled.Accessibility
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.foundation.isSystemInDarkTheme
 import android.Manifest
 import android.app.Activity
@@ -103,6 +108,12 @@ import kotlinx.coroutines.withContext
 fun SettingsScreen() {
     var route by remember { mutableStateOf(OrraNav.settingsRoute.value ?: "home") }
     LaunchedEffect(OrraNav.settingsRoute.value) { OrraNav.settingsRoute.value?.let { route = it; OrraNav.settingsRoute.value = null } }
+    val parentalContext = LocalContext.current
+    var parentalOk by remember { mutableStateOf(!OrraParental.lockSettings(parentalContext) || OrraLocks.isUnlocked(OrraParental.KEY)) }
+    if (!parentalOk) {
+        OrraUnlockDialog(tr("parental"), OrraParental.KEY, { OrraNav.tab.value = 0 }, false) { parentalOk = true }
+        return
+    }
     BackHandler(enabled = route != "home") { route = "home" }
     val back = { route = "home" }
     when (route) {
@@ -117,6 +128,11 @@ fun SettingsScreen() {
         "language" -> SettingsPage(tr("language"), back) { LanguagePage() }
         "sounds" -> SettingsPage(tr("sounds"), back) { SoundsPage() }
         "security" -> SettingsPage(tr("security"), back) { SecurityPage() }
+        "broadcast" -> SettingsPage(tr("broadcast"), back) { BroadcastPage() }
+        "events" -> SettingsPage(tr("events"), back) { EventsPage() }
+        "parental" -> SettingsPage(tr("parental"), back) { ParentalPage(onDenied = back) }
+        "accessibility" -> SettingsPage(tr("accessibility"), back) { AccessibilityPage() }
+        "callscreen" -> SettingsPage(tr("call_screen"), back) { CallScreenPage() }
         "about" -> SettingsPage(tr("about"), back) { AboutPage() }
         else -> SettingsHome { route = it }
     }
@@ -154,6 +170,11 @@ private fun SettingsHome(open: (String) -> Unit) {
             SettingsRow(Icons.Filled.Folder, Color(0xFF2E9BFF), tr("folders"), tr("folders_sub")) { open("folders") }
             SettingsRow(Icons.Filled.Laptop, Color(0xFF14B8A6), tr("devices"), tr("devices_sub")) { open("devices") }
             SettingsRow(Icons.Filled.BatteryChargingFull, Color(0xFFF97316), tr("power_saving"), tr("power_sub")) { open("power") }
+            SettingsRow(Icons.Filled.Campaign, Color(0xFF0EA5E9), tr("broadcast"), tr("broadcast_sub")) { open("broadcast") }
+            SettingsRow(Icons.Filled.Event, Color(0xFFF43F5E), tr("events"), tr("events_sub")) { open("events") }
+            SettingsRow(Icons.Filled.FamilyRestroom, Color(0xFF84CC16), tr("parental"), tr("parental_sub")) { open("parental") }
+            SettingsRow(Icons.Filled.Accessibility, Color(0xFF8B5CF6), tr("accessibility"), tr("accessibility_sub")) { open("accessibility") }
+            SettingsRow(Icons.Filled.Call, Color(0xFF22C55E), tr("call_screen"), tr("call_screen_sub")) { open("callscreen") }
             SettingsRow(Icons.Filled.Notifications, Color(0xFFEC4899), tr("sounds"), tr("sounds_sub")) { open("sounds") }
             SettingsRow(Icons.Filled.VpnKey, Color(0xFF16A34A), tr("security"), tr("security_sub")) { open("security") }
             SettingsRow(Icons.Filled.Language, Color(0xFF9B6BFF), tr("language"), OrraLang.nativeName(OrraLang.code.value, tr("system_language"))) { open("language") }
@@ -741,6 +762,270 @@ private fun SecurityPage() {
     }
     SectionTitle(tr("protection_active"))
     Note(tr("protection_list"))
+}
+
+// ------------------------------------------------------------------ Broadcast, events, parental controls, accessibility, call screen
+
+@Composable
+private fun BroadcastPage() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var chats by remember { mutableStateOf<List<OrraChatConversation>>(emptyList()) }
+    var rev by remember { mutableIntStateOf(0) }
+    var creating by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<OrraFolder?>(null) }
+    var sending by remember { mutableStateOf<OrraFolder?>(null) }
+    var status by remember { mutableStateOf("") }
+    val lists = remember(rev) { OrraBroadcast.list(context) }
+    LaunchedEffect(Unit) {
+        val client = orraClient(context)
+        if (client != null) runCatching { chats = withContext(Dispatchers.IO) { client.loadConversations() }.filter { !it.isGroup && !it.isAi } }
+    }
+    Note(tr("broadcast_note"))
+    Button(onClick = { creating = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Filled.Add, contentDescription = null); Text("  " + tr("broadcast_new")) }
+    if (status.isNotBlank()) Note(status)
+    if (lists.isEmpty()) Note(tr("broadcast_empty"))
+    else OrraCard {
+        lists.forEach { list ->
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Campaign, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(list.name, maxLines = 1)
+                    Text(list.chatIds.size.toString() + " " + tr("chats_count"), style = MaterialTheme.typography.bodySmall)
+                }
+                TextButton(onClick = { sending = list }) { Text(tr("broadcast_send")) }
+                TextButton(onClick = { editing = list }) { Text(tr("edit")) }
+                TextButton(onClick = { OrraBroadcast.save(context, OrraBroadcast.list(context).filterNot { it.id == list.id }); rev++ }) { Text(tr("delete")) }
+            }
+        }
+    }
+    if (creating || editing != null) {
+        ListEditorDialog(editing, chats, { creating = false; editing = null }) { name, ids ->
+            val existing = editing
+            val all = OrraBroadcast.list(context)
+            OrraBroadcast.save(context, if (existing == null) all + OrraFolder(java.util.UUID.randomUUID().toString(), name.trim(), ids)
+                else all.map { if (it.id == existing.id) it.copy(name = name.trim(), chatIds = ids) else it })
+            rev++; creating = false; editing = null
+        }
+    }
+    sending?.let { list ->
+        var text by remember(list.id) { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { sending = null },
+            title = { Text(list.name) },
+            text = { OutlinedTextField(text, { text = it }, label = { Text(tr("broadcast_message")) }, minLines = 3) },
+            confirmButton = {
+                TextButton(enabled = text.isNotBlank(), onClick = {
+                    val message = text.trim(); sending = null
+                    scope.launch {
+                        val client = orraClient(context)
+                        var ok = 0
+                        if (client != null) withContext(Dispatchers.IO) {
+                            list.chatIds.forEach { id -> runCatching { client.sendMessage(id, message) }.onSuccess { ok++ } }
+                        }
+                        status = tr("broadcast_sent") + " " + ok + "/" + list.chatIds.size
+                    }
+                }) { Text(tr("broadcast_send")) }
+            },
+            dismissButton = { TextButton(onClick = { sending = null }) { Text(tr("cancel")) } }
+        )
+    }
+}
+
+@Composable
+private fun ListEditorDialog(existing: OrraFolder?, chats: List<OrraChatConversation>, onDismiss: () -> Unit, onSave: (String, Set<String>) -> Unit) {
+    var name by remember { mutableStateOf(existing?.name.orEmpty()) }
+    var selected by remember { mutableStateOf(existing?.chatIds ?: emptySet()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("broadcast_new")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it.take(30) }, singleLine = true, label = { Text(tr("broadcast_name")) })
+                Text(tr("broadcast_pick"), style = MaterialTheme.typography.labelLarge)
+                Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                    if (chats.isEmpty()) Text(tr("no_chats"), style = MaterialTheme.typography.bodySmall)
+                    chats.forEach { chat ->
+                        Row(Modifier.fillMaxWidth().clickable { selected = if (chat.id in selected) selected - chat.id else selected + chat.id },
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(chat.id in selected, { selected = if (it) selected + chat.id else selected - chat.id })
+                            Text(chat.username, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(enabled = name.isNotBlank() && selected.isNotEmpty(), onClick = { onSave(name, selected) }) { Text(tr("save")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("cancel")) } }
+    )
+}
+
+private fun formatEventTime(millis: Long): String =
+    java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(millis))
+
+@Composable
+private fun EventsPage() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var rev by remember { mutableIntStateOf(0) }
+    var creating by remember { mutableStateOf(false) }
+    var sharing by remember { mutableStateOf<OrraEvent?>(null) }
+    var chats by remember { mutableStateOf<List<OrraChatConversation>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+    val events = remember(rev) { OrraEvents.list(context).sortedBy { it.whenMillis } }
+    LaunchedEffect(Unit) {
+        val client = orraClient(context)
+        if (client != null) runCatching { chats = withContext(Dispatchers.IO) { client.loadConversations() }.filter { !it.isAi } }
+    }
+    Button(onClick = { creating = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Filled.Add, contentDescription = null); Text("  " + tr("event_new")) }
+    if (status.isNotBlank()) Note(status)
+    if (events.isEmpty()) Note(tr("event_none"))
+    events.forEach { event ->
+        OrraCard {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(event.title, fontWeight = FontWeight.SemiBold)
+                Text(formatEventTime(event.whenMillis), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                if (event.note.isNotBlank()) Text(event.note, style = MaterialTheme.typography.bodySmall)
+                Row {
+                    TextButton(onClick = {
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_INSERT).setData(android.provider.CalendarContract.Events.CONTENT_URI)
+                                .putExtra(android.provider.CalendarContract.Events.TITLE, event.title)
+                                .putExtra(android.provider.CalendarContract.Events.DESCRIPTION, event.note)
+                                .putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, event.whenMillis))
+                        }
+                    }) { Text(tr("event_add_calendar")) }
+                    TextButton(onClick = { sharing = event }) { Text(tr("event_share")) }
+                    TextButton(onClick = { OrraEvents.save(context, OrraEvents.list(context).filterNot { it.id == event.id }); rev++ }) { Text(tr("delete")) }
+                }
+            }
+        }
+    }
+    if (creating) {
+        var title by remember { mutableStateOf("") }
+        var note by remember { mutableStateOf("") }
+        var picked by remember { mutableStateOf(0L) }
+        AlertDialog(
+            onDismissRequest = { creating = false },
+            title = { Text(tr("event_new")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(title, { title = it.take(60) }, singleLine = true, label = { Text(tr("event_title")) })
+                    OutlinedTextField(note, { note = it.take(200) }, label = { Text(tr("event_note_label")) })
+                    OutlinedButton(onClick = {
+                        val cal = java.util.Calendar.getInstance()
+                        android.app.DatePickerDialog(context, { _, y, m, d ->
+                            android.app.TimePickerDialog(context, { _, h, min ->
+                                cal.set(y, m, d, h, min, 0); picked = cal.timeInMillis
+                            }, cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE), true).show()
+                        }, cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH), cal.get(java.util.Calendar.DAY_OF_MONTH)).show()
+                    }, modifier = Modifier.fillMaxWidth()) { Text(if (picked > 0L) formatEventTime(picked) else tr("event_pick")) }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = title.isNotBlank() && picked > 0L, onClick = {
+                    OrraEvents.save(context, OrraEvents.list(context) + OrraEvent(java.util.UUID.randomUUID().toString(), title.trim(), note.trim(), picked))
+                    rev++; creating = false
+                }) { Text(tr("save")) }
+            },
+            dismissButton = { TextButton(onClick = { creating = false }) { Text(tr("cancel")) } }
+        )
+    }
+    sharing?.let { event ->
+        AlertDialog(
+            onDismissRequest = { sharing = null },
+            title = { Text(tr("event_share")) },
+            text = {
+                Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
+                    if (chats.isEmpty()) Text(tr("no_chats"))
+                    chats.forEach { chat ->
+                        TextButton(onClick = {
+                            sharing = null
+                            scope.launch {
+                                val client = orraClient(context)
+                                val text = "\uD83D\uDCC5 " + event.title + "\n" + formatEventTime(event.whenMillis) + (if (event.note.isNotBlank()) "\n" + event.note else "")
+                                status = if (client != null && runCatching { withContext(Dispatchers.IO) { client.sendMessage(chat.id, text) } }.isSuccess) tr("event_shared") else tr("send_failed")
+                            }
+                        }) { Text(chat.username) }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { sharing = null }) { Text(tr("cancel")) } }
+        )
+    }
+}
+
+@Composable
+private fun ParentalPage(onDenied: () -> Unit) {
+    val context = LocalContext.current
+    var rev by remember { mutableIntStateOf(0) }
+    var settingPin by remember { mutableStateOf(false) }
+    var askPin by remember { mutableStateOf(OrraLocks.has(context, OrraParental.KEY) && !OrraLocks.isUnlocked(OrraParental.KEY)) }
+    if (askPin) {
+        OrraUnlockDialog(tr("parental"), OrraParental.KEY, { onDenied() }, false) { askPin = false; rev++ }
+        return
+    }
+    val hasPin = rev >= 0 && OrraLocks.has(context, OrraParental.KEY)
+    Note(tr("parental_note"))
+    if (!hasPin) {
+        Button(onClick = { settingPin = true }, modifier = Modifier.fillMaxWidth()) { Text(tr("parental_set_pin")) }
+    } else {
+        OrraCard {
+            SwitchRow(tr("parental_lock_settings"), tr("parental_lock_settings_sub"), OrraParental.raw(context, "parental_lock_settings")) { OrraParental.set(context, "parental_lock_settings", it); rev++ }
+            SwitchRow(tr("parental_block_media"), tr("parental_block_media_sub"), OrraParental.raw(context, "parental_block_media")) { OrraParental.set(context, "parental_block_media", it); rev++ }
+            SwitchRow(tr("parental_block_calls"), tr("parental_block_calls_sub"), OrraParental.raw(context, "parental_block_calls")) { OrraParental.set(context, "parental_block_calls", it); rev++ }
+        }
+        OutlinedButton(onClick = { settingPin = true }, modifier = Modifier.fillMaxWidth()) { Text(tr("parental_change_pin")) }
+        OutlinedButton(onClick = { OrraParental.removeAll(context); rev++ }, modifier = Modifier.fillMaxWidth()) { Text(tr("parental_remove")) }
+    }
+    if (settingPin) {
+        OrraSetPasswordDialog(tr("parental_set_pin"), { settingPin = false }) { pin ->
+            OrraLocks.set(context, OrraParental.KEY, pin)
+            OrraLocks.verify(context, OrraParental.KEY, pin)
+            settingPin = false; rev++
+        }
+    }
+}
+
+@Composable
+private fun AccessibilityPage() {
+    val context = LocalContext.current
+    var rev by remember { mutableIntStateOf(0) }
+    val refresh = rev
+    OrraCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(tr("text_size"), style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(1f to "size_normal", 1.15f to "size_large", 1.3f to "size_xlarge").forEach { (value, key) ->
+                    ChoiceChip(tr(key), OrraAccess.scale.value == value) { OrraAccess.setScale(context, value) }
+                }
+            }
+        }
+        SwitchRow(tr("high_contrast"), tr("high_contrast_sub"), OrraAccess.highContrast.value) { OrraAccess.setHighContrast(context, it) }
+        SwitchRow(tr("reduce_motion"), tr("reduce_motion_sub"), refresh >= 0 && !OrraPrefs.get(context).getBoolean("chat_animations", true)) {
+            OrraPrefs.get(context).edit().putBoolean("chat_animations", !it).apply(); rev++
+        }
+    }
+}
+
+@Composable
+private fun CallScreenPage() {
+    val context = LocalContext.current
+    var style by remember { mutableStateOf(OrraPrefs.get(context).getString("call_style", "ios") ?: "ios") }
+    Note(tr("call_screen_sub"))
+    listOf("ios" to ("call_style_ios" to "call_style_ios_sub"), "swipe" to ("call_style_swipe" to "call_style_swipe_sub")).forEach { (value, keys) ->
+        OrraCard {
+            Row(Modifier.fillMaxWidth().clickable { style = value; OrraPrefs.get(context).edit().putString("call_style", value).apply() }.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(tr(keys.first), fontWeight = FontWeight.SemiBold)
+                    Text(tr(keys.second), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+                }
+                RadioButton(selected = style == value, onClick = { style = value; OrraPrefs.get(context).edit().putString("call_style", value).apply() })
+            }
+        }
+    }
 }
 
 // ------------------------------------------------------------------ About

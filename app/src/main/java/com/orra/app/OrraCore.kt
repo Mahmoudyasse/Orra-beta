@@ -536,3 +536,64 @@ object OrraNav {
     val settingsRoute = mutableStateOf<String?>(null)
     fun openSettings(route: String) { settingsRoute.value = route; tab.value = 5 }
 }
+
+object OrraBroadcast {
+    fun list(context: Context): List<OrraFolder> = runCatching {
+        val arr = JSONArray(OrraPrefs.get(context).getString("broadcast_lists", "[]"))
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            val ids = o.optJSONArray("chats") ?: JSONArray()
+            OrraFolder(o.getString("id"), o.getString("name"), (0 until ids.length()).map { ids.getString(it) }.toSet())
+        }
+    }.getOrDefault(emptyList())
+    fun save(context: Context, lists: List<OrraFolder>) {
+        val arr = JSONArray()
+        lists.forEach { f -> arr.put(JSONObject().put("id", f.id).put("name", f.name).put("chats", JSONArray(f.chatIds.toList()))) }
+        OrraPrefs.get(context).edit().putString("broadcast_lists", arr.toString()).apply()
+    }
+}
+
+data class OrraEvent(val id: String, val title: String, val note: String, val whenMillis: Long)
+
+object OrraEvents {
+    fun list(context: Context): List<OrraEvent> = runCatching {
+        val arr = JSONArray(OrraPrefs.get(context).getString("orra_events", "[]"))
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            OrraEvent(o.getString("id"), o.getString("title"), o.optString("note"), o.getLong("when"))
+        }
+    }.getOrDefault(emptyList())
+    fun save(context: Context, events: List<OrraEvent>) {
+        val arr = JSONArray()
+        events.forEach { arr.put(JSONObject().put("id", it.id).put("title", it.title).put("note", it.note).put("when", it.whenMillis)) }
+        OrraPrefs.get(context).edit().putString("orra_events", arr.toString()).apply()
+    }
+}
+
+/** Parent PIN plus restrictions that are enforced on this phone. */
+object OrraParental {
+    const val KEY = "parental"
+    fun active(context: Context) = OrraLocks.has(context, KEY)
+    private fun flag(context: Context, name: String) = active(context) && OrraPrefs.get(context).getBoolean(name, false)
+    fun lockSettings(context: Context) = flag(context, "parental_lock_settings")
+    fun blockMedia(context: Context) = flag(context, "parental_block_media")
+    fun blockCalls(context: Context) = flag(context, "parental_block_calls")
+    fun set(context: Context, name: String, value: Boolean) { OrraPrefs.get(context).edit().putBoolean(name, value).apply() }
+    fun raw(context: Context, name: String) = OrraPrefs.get(context).getBoolean(name, false)
+    fun removeAll(context: Context) {
+        OrraLocks.remove(context, KEY)
+        OrraPrefs.get(context).edit().remove("parental_lock_settings").remove("parental_block_media").remove("parental_block_calls").apply()
+    }
+}
+
+object OrraAccess {
+    val scale = mutableStateOf(1f)
+    val highContrast = mutableStateOf(false)
+    fun load(context: Context) {
+        val p = OrraPrefs.get(context)
+        scale.value = p.getFloat("text_scale", 1f)
+        highContrast.value = p.getBoolean("high_contrast", false)
+    }
+    fun setScale(context: Context, value: Float) { scale.value = value; OrraPrefs.get(context).edit().putFloat("text_scale", value).apply() }
+    fun setHighContrast(context: Context, value: Boolean) { highContrast.value = value; OrraPrefs.get(context).edit().putBoolean("high_contrast", value).apply() }
+}

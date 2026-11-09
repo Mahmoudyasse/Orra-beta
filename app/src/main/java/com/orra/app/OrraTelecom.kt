@@ -78,6 +78,8 @@ fun rememberOrraCallAction(video: Boolean = false): (String, String) -> Unit {
     var accounts by remember { mutableStateOf<List<PhoneAccountHandle>>(emptyList()) }
     var labels by remember { mutableStateOf<List<String>>(emptyList()) }
     var showPicker by remember { mutableStateOf(false) }
+    var askDefault by remember { mutableStateOf<Triple<String, String, Boolean>?>(null) }
+    var skipAsk by remember { mutableStateOf(false) }
 
     fun loadAccounts(request: Triple<String, String, Boolean>) {
         val telecom = context.getSystemService(TelecomManager::class.java)
@@ -117,7 +119,9 @@ fun rememberOrraCallAction(video: Boolean = false): (String, String) -> Unit {
 
     val start: (String, String) -> Unit = { name, number ->
         if (number.isNotBlank()) {
-            run {
+            if (!skipAsk && !isOrraDefaultDialer(context)) {
+                askDefault = Triple(name, number, video)
+            } else run {
                 val request = Triple(name, number, video)
                 val missing = buildList {
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED)
@@ -136,6 +140,23 @@ fun rememberOrraCallAction(video: Boolean = false): (String, String) -> Unit {
                 }
             }
         }
+    }
+
+    askDefault?.let {
+        AlertDialog(
+            onDismissRequest = { askDefault = null },
+            title = { Text(tr("default_dialer_title")) },
+            text = { Text(tr("default_dialer_body")) },
+            confirmButton = {
+                TextButton(onClick = { askDefault = null; (context as? Activity)?.let { requestOrraDialerRole(it) } }) { Text(tr("default_dialer_set")) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    askDefault = null; skipAsk = true
+                    Toast.makeText(context, tr("call_again"), Toast.LENGTH_LONG).show()
+                }) { Text(tr("default_dialer_skip")) }
+            }
+        )
     }
 
     if (showPicker) {

@@ -1,5 +1,12 @@
 package com.orra.app
 
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.FamilyRestroom
+import androidx.compose.material.icons.filled.Accessibility
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Lock
@@ -253,38 +260,71 @@ fun OrraAttachSheet(
     }
 }
 
-/** Full-screen contact info like Telegram: avatar, status, Message / Mute / Call / Video and the phone number. */
+/** Full-screen contact page: cover, photo, status, quick actions, ID and phone number. */
 @Composable
 fun OrraPeerProfile(
     name: String, status: String, phone: String?, muted: Boolean, canCall: Boolean,
-    onDismiss: () -> Unit, onMessage: () -> Unit, onToggleMute: () -> Unit, onCall: () -> Unit, onVideo: () -> Unit
+    onDismiss: () -> Unit, onMessage: () -> Unit, onToggleMute: () -> Unit, onCall: () -> Unit, onVideo: () -> Unit,
+    avatarUrl: String? = null, coverUrl: String? = null, bio: String = "", username: String = "", userId: String? = null
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.padding(16.dp).padding(top = 28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(16.dp).padding(top = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth()) {
                     Surface(modifier = Modifier.size(46.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant, onClick = onDismiss) {
                         Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.ArrowBack, contentDescription = tr("back")) }
                     }
                 }
-                OrraAvatar(name, null, 130.dp)
+                Box(Modifier.fillMaxWidth().height(220.dp)) {
+                    if (!coverUrl.isNullOrBlank()) AsyncImage(coverUrl, null, Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(20.dp)),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                    else Surface(modifier = Modifier.fillMaxWidth().height(160.dp), shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceVariant) {}
+                    Box(Modifier.align(Alignment.BottomCenter)) { OrraAvatar(name, avatarUrl, 120.dp) }
+                }
                 Text(name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(status, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
-                Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ProfileTile(Icons.Default.Send, tr("profile_message"), true, onMessage)
                     ProfileTile(if (muted) Icons.Default.NotificationsOff else Icons.Default.Notifications, tr(if (muted) "profile_unmute" else "profile_mute"), true, onToggleMute)
                     ProfileTile(Icons.Default.Call, tr("voice_call"), canCall, onCall)
                     ProfileTile(Icons.Default.Videocam, tr("video_call"), canCall, onVideo)
                 }
-                if (!phone.isNullOrBlank()) {
-                    Surface(modifier = Modifier.fillMaxWidth().padding(top = 6.dp), shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(phone, style = MaterialTheme.typography.titleMedium)
-                            Text(tr("profile_mobile"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                        }
+                Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (bio.isNotBlank()) ProfileInfo(tr("profile_about"), bio)
+                        if (username.isNotBlank()) ProfileInfo(tr("profile_username"), "@" + username)
+                        if (!userId.isNullOrBlank()) ProfileInfo(tr("profile_id"), userId.take(8).uppercase())
+                        if (!phone.isNullOrBlank()) ProfileInfo(tr("profile_mobile"), phone)
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ProfileInfo(label: String, value: String) {
+    Column {
+        Text(value, style = MaterialTheme.typography.titleMedium)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+    }
+}
+
+/** Voice message recording bar: timer, delete and send. */
+@Composable
+fun OrraRecordingBar(seconds: Int, onCancel: () -> Unit, onSend: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Surface(modifier = Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+            Row(Modifier.padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Surface(modifier = Modifier.size(10.dp), shape = CircleShape, color = MaterialTheme.colorScheme.error) {}
+                Text(String.format("%d:%02d", seconds / 60, seconds % 60), Modifier.padding(start = 10.dp), fontWeight = FontWeight.SemiBold)
+                Text(tr("recording"), Modifier.weight(1f).padding(start = 10.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                IconButton(onClick = onCancel) { Icon(Icons.Default.Delete, contentDescription = tr("cancel_recording"), tint = MaterialTheme.colorScheme.error) }
+            }
+        }
+        Surface(modifier = Modifier.size(52.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary, onClick = onSend) {
+            Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Send, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary) }
         }
     }
 }
@@ -343,12 +383,17 @@ fun OrraSettingsMenu(name: String, phone: String, onProfile: () -> Unit, onOpen:
         MenuEntry("privacy", androidx.compose.material.icons.Icons.Default.Lock, "privacy_security", "privacy_sub"),
         MenuEntry("folders", androidx.compose.material.icons.Icons.Default.Folder, "folders", "folders_sub"),
         MenuEntry("chat", androidx.compose.material.icons.Icons.Default.ChatBubble, "chat_settings", "chat_settings_sub"),
+        MenuEntry("broadcast", androidx.compose.material.icons.Icons.Default.Campaign, "broadcast", "broadcast_sub"),
+        MenuEntry("events", androidx.compose.material.icons.Icons.Default.Event, "events", "events_sub"),
         MenuEntry("notifications", Icons.Default.Notifications, "notifications", "notifications_sub"),
         MenuEntry("data", androidx.compose.material.icons.Icons.Default.PieChart, "data_storage", "data_sub"),
+        MenuEntry("parental", androidx.compose.material.icons.Icons.Default.FamilyRestroom, "parental", "parental_sub"),
+        MenuEntry("accessibility", androidx.compose.material.icons.Icons.Default.Accessibility, "accessibility", "accessibility_sub"),
+        MenuEntry("callscreen", androidx.compose.material.icons.Icons.Default.Call, "call_screen", "call_screen_sub"),
+        MenuEntry("language", androidx.compose.material.icons.Icons.Default.Language, "language", null),
         MenuEntry("sounds", Icons.Default.MusicNote, "sounds", "sounds_sub"),
         MenuEntry("power", androidx.compose.material.icons.Icons.Default.BatteryChargingFull, "power_saving", "power_sub"),
-        MenuEntry("security", androidx.compose.material.icons.Icons.Default.Security, "security", "security_sub"),
-        MenuEntry("language", androidx.compose.material.icons.Icons.Default.Language, "language", null)
+        MenuEntry("security", androidx.compose.material.icons.Icons.Default.Security, "security", "security_sub")
     )
     DropdownMenuItem(
         text = {
@@ -376,4 +421,34 @@ fun OrraSettingsMenu(name: String, phone: String, onProfile: () -> Unit, onOpen:
         )
     }
     androidx.compose.material3.HorizontalDivider()
+}
+
+/** Drop-in replacement for AlertDialog that fills the screen like a normal page. */
+@Composable
+fun OrraFullScreenDialog(
+    onDismissRequest: () -> Unit,
+    title: @Composable () -> Unit,
+    text: @Composable () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    dismissButton: @Composable () -> Unit = {},
+    header: @Composable () -> Unit = {}
+) {
+    Dialog(onDismissRequest = onDismissRequest, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.padding(horizontal = 16.dp).padding(top = 28.dp, bottom = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(modifier = Modifier.size(46.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant, onClick = onDismissRequest) {
+                        Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.ArrowBack, contentDescription = tr("back")) }
+                    }
+                    Box(Modifier.padding(start = 12.dp)) { title() }
+                }
+                Column(Modifier.weight(1f).verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    header()
+                    text()
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { dismissButton(); confirmButton() }
+            }
+        }
+    }
 }

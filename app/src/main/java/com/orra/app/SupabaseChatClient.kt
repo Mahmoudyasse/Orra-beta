@@ -400,6 +400,15 @@ class SupabaseChatClient(
             row.optString("cover_url").takeIf { it.isNotBlank() }?.let { createSignedMediaUrl("orra-profiles", it) })
     }
 
+    /** Another person's public profile (name, about, photos, verified phone). Photos are skipped if they cannot be signed. */
+    fun loadPublicProfile(userId: String): OrraChatProfile? {
+        val rows = JSONArray(request("/rest/v1/profiles?select=username,display_name,bio,phone_number,phone_verified,avatar_url,cover_url&id=eq." + encode(userId) + "&limit=1"))
+        val row = rows.optJSONObject(0) ?: return null
+        fun signed(key: String): String? = row.optString(key).takeIf { it.isNotBlank() }?.let { runCatching { createSignedMediaUrl("orra-profiles", it) }.getOrNull() }
+        return OrraChatProfile(row.optString("username"), row.optString("display_name").ifBlank { row.optString("username") },
+            row.optString("bio"), if (row.optBoolean("phone_verified")) row.optString("phone_number") else "", signed("avatar_url"), signed("cover_url"))
+    }
+
     fun blockUser(userId: String) {
         request("/rest/v1/blocked_users", "POST",
             JSONObject().put("blocker_id", currentUserId).put("blocked_id", userId))

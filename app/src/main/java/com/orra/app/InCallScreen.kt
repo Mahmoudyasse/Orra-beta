@@ -1,5 +1,17 @@
 package com.orra.app
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.FlipCameraAndroid
+import androidx.compose.ui.graphics.Color
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.telecom.Call
@@ -88,6 +100,8 @@ fun InCallScreen() {
         Text(if (videoActive) "ORRA VIDEO CALL" else "ORRA CALL",
             color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
         Spacer(Modifier.height(18.dp))
+        OrraAvatar(number.ifBlank { "?" }, null, 110.dp)
+        Spacer(Modifier.height(12.dp))
         Text(number.ifBlank { "Unknown number" }, fontSize = 26.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
         Text(OrraCallState.status, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
@@ -148,46 +162,48 @@ fun InCallScreen() {
 
         Spacer(Modifier.height(22.dp))
         if (call != null) {
+            val style = remember { OrraPrefs.get(context).getString("call_style", "ios") ?: "ios" }
             if (ringing) {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Button(onClick = {
-                        val answerState = if (OrraCallState.videoState != VideoProfile.STATE_AUDIO_ONLY)
-                            VideoProfile.STATE_BIDIRECTIONAL else VideoProfile.STATE_AUDIO_ONLY
-                        call.answer(answerState)
-                    }) { Text(if (OrraCallState.videoState != VideoProfile.STATE_AUDIO_ONLY) "Answer video" else "Answer") }
-                    Button(onClick = { call.disconnect() }) { Text(tr("s_0d362728")) }
+                val answerState = if (OrraCallState.videoState != VideoProfile.STATE_AUDIO_ONLY)
+                    VideoProfile.STATE_BIDIRECTIONAL else VideoProfile.STATE_AUDIO_ONLY
+                if (style == "swipe") {
+                    OrraSwipeToAnswer(onAnswer = { call.answer(answerState) }, onDecline = { call.disconnect() })
+                } else {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 28.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        CallRoundButton(Icons.Default.CallEnd, tr("call_decline"), Color(0xFFFF3B30)) { call.disconnect() }
+                        CallRoundButton(Icons.Default.Call, tr("call_accept"), Color(0xFF34C759)) { call.answer(answerState) }
+                    }
                 }
             } else {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(modifier = Modifier.weight(1f), onClick = {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    CallToggleButton(if (OrraCallState.muted) Icons.Default.MicOff else Icons.Default.Mic, tr("call_mute"), OrraCallState.muted) {
                         OrraCallState.updateMute(!OrraCallState.muted)
-                    }) { Text(if (OrraCallState.muted) "Unmute" else "Mute") }
-                    OutlinedButton(modifier = Modifier.weight(1f), onClick = {
-                        OrraCallState.updateSpeaker(!OrraCallState.speaker)
-                    }) { Text(if (OrraCallState.speaker) "Earpiece" else "Speaker") }
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(modifier = Modifier.weight(1f), onClick = {
-                        if (holding) call.unhold() else call.hold()
-                    }) { Text(if (holding) "Resume" else "Hold") }
-                    OutlinedButton(modifier = Modifier.weight(1f), onClick = { showKeypad = !showKeypad }) {
-                        Text(if (showKeypad) "Hide keypad" else "Keypad")
                     }
-                    Button(modifier = Modifier.weight(1f), onClick = { call.disconnect() }) { Text(tr("s_87557f11")) }
+                    CallToggleButton(Icons.Default.Dialpad, tr("call_keypad"), showKeypad) { showKeypad = !showKeypad }
+                    CallToggleButton(Icons.Default.VolumeUp, tr("call_speaker"), OrraCallState.speaker) {
+                        OrraCallState.updateSpeaker(!OrraCallState.speaker)
+                    }
                 }
-                if (!videoActive && videoCall != null) {
-                    OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
-                        runCatching { videoCall.sendSessionModifyRequest(VideoProfile(VideoProfile.STATE_BIDIRECTIONAL)) }
-                            .onFailure { videoMessage = "The carrier rejected the video upgrade." }
-                    }) { Text(tr("s_ae5f3b42")) }
+                Spacer(Modifier.height(14.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    CallToggleButton(if (holding) Icons.Default.PlayArrow else Icons.Default.Pause, tr("call_hold"), holding) {
+                        if (holding) call.unhold() else call.hold()
+                    }
+                    if (!videoActive && videoCall != null) {
+                        CallToggleButton(Icons.Default.Videocam, tr("call_video"), false) {
+                            runCatching { videoCall.sendSessionModifyRequest(VideoProfile(VideoProfile.STATE_BIDIRECTIONAL)) }
+                                .onFailure { videoMessage = "The carrier rejected the video upgrade." }
+                        }
+                    }
+                    if (videoActive) {
+                        CallToggleButton(Icons.Default.FlipCameraAndroid, tr("call_flip"), false) {
+                            frontCamera = !frontCamera
+                            setCallCamera(frontCamera)
+                        }
+                    }
                 }
-                if (videoActive) {
-                    OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
-                        frontCamera = !frontCamera
-                        setCallCamera(frontCamera)
-                    }) { Text(tr("s_5544638c")) }
-                }
+                Spacer(Modifier.height(22.dp))
+                CallRoundButton(Icons.Default.CallEnd, tr("call_end"), Color(0xFFFF3B30)) { call.disconnect() }
                 if (showKeypad) {
                     Spacer(Modifier.height(12.dp))
                     listOf(listOf('1','2','3'), listOf('4','5','6'), listOf('7','8','9'), listOf('*','0','#')).forEach { row ->

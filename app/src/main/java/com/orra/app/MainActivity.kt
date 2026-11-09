@@ -91,11 +91,17 @@ class MainActivity : ComponentActivity() {
         OrraLang.load(this)
         OrraEye.load(this)
         OrraSecurity.load(this)
+        OrraAccess.load(this)
         OrraSfx.init(this)
         consumeAuthCallback(intent)
         setContent {
             OrraTheme {
-                CompositionLocalProvider(LocalLayoutDirection provides (OrraLang.layoutOverride() ?: LocalLayoutDirection.current)) {
+                CompositionLocalProvider(
+                    LocalLayoutDirection provides (OrraLang.layoutOverride() ?: LocalLayoutDirection.current),
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
+                        androidx.compose.ui.platform.LocalDensity.current.density,
+                        androidx.compose.ui.platform.LocalDensity.current.fontScale * OrraAccess.scale.value)
+                ) {
                     Box(Modifier.fillMaxSize()) {
                         if (OrraInternetCallState.callId != null) OrraInternetCallScreen() else if (OrraCallState.activeCall != null) InCallScreen() else OrraApp()
                         OrraEyeOverlay()

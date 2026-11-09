@@ -30,7 +30,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import kotlinx.coroutines.delay
 
 @Composable
-fun OrraUnlockDialog(title: String, lockKey: String, onDismiss: () -> Unit, onUnlocked: () -> Unit) {
+fun OrraUnlockDialog(title: String, lockKey: String, onDismiss: () -> Unit, allowReset: Boolean = true, onUnlocked: () -> Unit) {
     val context = LocalContext.current
     var password by remember { mutableStateOf("") }
     var wrong by remember { mutableStateOf(false) }
@@ -59,7 +59,7 @@ fun OrraUnlockDialog(title: String, lockKey: String, onDismiss: () -> Unit, onUn
                 OutlinedTextField(password, { password = it; wrong = false }, singleLine = true, isError = wrong,
                     label = { Text(tr("password")) }, visualTransformation = PasswordVisualTransformation())
                 if (wrong) Text(tr("wrong_password"), color = MaterialTheme.colorScheme.error)
-                TextButton(onClick = { confirmReset = true }) { Text(tr("forgot_password")) }
+                if (allowReset) TextButton(onClick = { confirmReset = true }) { Text(tr("forgot_password")) }
             }
         },
         confirmButton = { TextButton(onClick = { if (OrraLocks.verify(context, lockKey, password)) onUnlocked() else wrong = true }) { Text(tr("unlock")) } },
@@ -95,7 +95,9 @@ fun OrraSetPasswordDialog(title: String, onDismiss: () -> Unit, onSave: (String)
 fun OrraMediaGate(kind: String, key: String, isGroup: Boolean, content: @Composable () -> Unit) {
     val context = LocalContext.current
     var manual by remember(key) { mutableStateOf(false) }
-    if (kind.isBlank() || manual || OrraDownloads.allowed(context, kind, isGroup)) {
+    if ((kind == "image" || kind == "video") && OrraParental.blockMedia(context)) {
+        Text(tr("parental_blocked"), style = MaterialTheme.typography.bodySmall)
+    } else if (kind.isBlank() || manual || OrraDownloads.allowed(context, kind, isGroup)) {
         content()
     } else {
         Column {

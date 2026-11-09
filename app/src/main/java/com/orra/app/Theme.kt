@@ -82,5 +82,9 @@ fun OrraTheme(content: @Composable () -> Unit) {
             }
         }
     }
-    MaterialTheme(colorScheme = scheme, content = content)
+    val contrastColor = if (dark) Color.White else Color.Black
+    val finalScheme = if (OrraAccess.highContrast.value)
+        scheme.copy(onSurface = contrastColor, onSurfaceVariant = contrastColor, onBackground = contrastColor, outline = contrastColor)
+    else scheme
+    MaterialTheme(colorScheme = finalScheme, content = content)
 }
