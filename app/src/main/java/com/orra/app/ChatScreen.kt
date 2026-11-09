@@ -51,6 +51,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -700,6 +701,12 @@ fun ChatScreen() {
     val visibleMessages = if (clearedAt > 0L) messages.filter {
         runCatching { java.time.OffsetDateTime.parse(it.createdAt).toInstant().toEpochMilli() > clearedAt }.getOrDefault(true)
     } else messages
+    val chatListState = rememberLazyListState()
+    LaunchedEffect(selected?.id, visibleMessages.size) {
+        if (chatSearch.isBlank() && visibleMessages.isNotEmpty()) {
+            runCatching { chatListState.scrollToItem(visibleMessages.size - 1) }
+        }
+    }
     lockTarget?.let { target ->
         OrraUnlockDialog(target.username, OrraLocks.chatKey(target.id), { lockTarget = null }) {
             selected = target; messages = emptyList(); lockTarget = null
@@ -1066,6 +1073,7 @@ fun ChatScreen() {
                     singleLine = true, label = { Text(tr("s_1ab0d30f")) })
             }
             LazyColumn(
+                state = chatListState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -1077,7 +1085,7 @@ fun ChatScreen() {
                                 selectedMessage = message
                                 editText = message.body
                             }),
-                            color = if (mine) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                            color = if (mine) MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)
                                 else MaterialTheme.colorScheme.surfaceVariant,
                             shape = RoundedCornerShape(18.dp)
                         ) {
@@ -1115,11 +1123,15 @@ fun ChatScreen() {
                                             runCatching {
                                                 player?.release()
                                                 player = MediaPlayer().apply {
-                                                    setDataSource(message.mediaUrl)
+                                                    setDataSource(message.mediaUrl ?: throw IllegalStateException("Voice file is not available."))
                                                     setOnPreparedListener { it.start() }
+                                                    setOnErrorListener { _, _, _ -> voiceStatus = "Could not play this voice message"; true }
                                                     prepareAsync()
                                                 }
-                                            }.onFailure { android.util.Log.w("ORRA", "Voice playback failed", it) }
+                                            }.onFailure {
+                                                android.util.Log.w("ORRA", "Voice playback failed", it)
+                                                voiceStatus = "Could not play this voice message"
+                                            }
                                         }) { Icon(Icons.Default.Mic, contentDescription = "Play voice message") }
                                         Text(tr("s_a716aa47"))
                                     }
@@ -1161,19 +1173,19 @@ fun ChatScreen() {
                                 }
                                 if (message.editedAt != null) Text(tr("s_67ed6ddb"), style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(formatChatTimestamp(message.createdAt),
-                                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                if (mine && message.receiptStatus != null) {
-                                    Text(
-                                        when (message.receiptStatus) {
-                                            "read" -> "✓✓ Read"
-                                            "delivered" -> "✓✓ Delivered"
-                                            else -> "✓ Sent"
-                                        },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (message.receiptStatus == "read") MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    Text(formatChatTimestamp(message.createdAt),
+                                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (mine && message.receiptStatus != null) {
+                                        Text(
+                                            if (message.receiptStatus == "sent") "✓" else "✓✓",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (message.receiptStatus == "read") Color(0xFF34B7F1)
+                                                else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         }

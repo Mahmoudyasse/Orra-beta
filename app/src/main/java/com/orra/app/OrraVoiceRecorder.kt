@@ -37,13 +37,14 @@ class OrraVoiceRecorder(private val outputDir: File) {
         if (recording) return
         val min = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         if (min <= 0) { onError("Audio format is not supported on this device."); return }
-        val rec = runCatching {
-            AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, RATE,
-                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(min * 2, 4096))
-        }.getOrElse { onError("Microphone could not be initialized."); return }
-        if (rec.state != AudioRecord.STATE_INITIALIZED) {
-            rec.release(); onError("Microphone initialization failed."); return
+        fun tryOpen(source: Int): AudioRecord? = runCatching {
+            AudioRecord(source, RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(min * 2, 4096))
+        }.getOrNull()?.let { candidate ->
+            if (candidate.state == AudioRecord.STATE_INITIALIZED) candidate else { candidate.release(); null }
         }
+        val rec = tryOpen(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
+            ?: tryOpen(MediaRecorder.AudioSource.MIC)
+            ?: run { onError("Microphone could not be initialized."); return }
         audioRecord = rec
         noise = if (NoiseSuppressor.isAvailable()) runCatching { NoiseSuppressor.create(rec.audioSessionId)?.apply { enabled = true } }.getOrNull() else null
         echo = if (AcousticEchoCanceler.isAvailable()) runCatching { AcousticEchoCanceler.create(rec.audioSessionId)?.apply { enabled = true } }.getOrNull() else null

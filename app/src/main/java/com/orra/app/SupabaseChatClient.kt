@@ -77,6 +77,13 @@ class SupabaseChatClient(
 
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
+    /** Path-safe encoding: URLEncoder turns spaces into '+', which Storage treats as a literal plus sign. */
+    private fun encodePath(path: String): String =
+        path.split("/").joinToString("/") { encode(it).replace("+", "%20") }
+
+    private fun legacyEncodePath(path: String): String =
+        path.split("/").joinToString("/") { encode(it) }
+
     fun testConnection() {
         request("/rest/v1/", "GET", null, false)
     }
@@ -275,10 +282,12 @@ class SupabaseChatClient(
         senderIds.forEach { senderId ->
             val cachedName = synchronized(senderNameCache) { senderNameCache[senderId] }
             val resolvedName = cachedName ?: run {
-                val profileRows = JSONArray(request("/rest/v1/profiles?select=username&id=eq." + encode(senderId) + "&limit=1"))
-                profileRows.optJSONObject(0)?.optString("username").orEmpty().also { name ->
-                    synchronized(senderNameCache) { senderNameCache[senderId] = name }
-                }
+                val name = runCatching {
+                    val profileRows = JSONArray(request("/rest/v1/profiles?select=username&id=eq." + encode(senderId) + "&limit=1"))
+                    profileRows.optJSONObject(0)?.optString("username").orEmpty()
+                }.getOrDefault("")
+                if (name.isNotBlank()) synchronized(senderNameCache) { senderNameCache[senderId] = name }
+                name
             }
             senderNames[senderId] = resolvedName
         }
@@ -298,6 +307,7 @@ class SupabaseChatClient(
             val row = rows.optJSONObject(i) ?: return@mapNotNull null
             if (row.optString("id") in hidden) return@mapNotNull null
             val deleted = row.optBoolean("deleted_for_everyone")
+            if (deleted) return@mapNotNull null
             val sender = row.optString("sender_id")
             val messageId = row.optString("id")
             val recipients = receiptsByMessage[messageId].orEmpty()
@@ -310,7 +320,11 @@ class SupabaseChatClient(
             OrraChatMessage(messageId, sender,
                 if (deleted) "This message was deleted" else row.optString("body"),
                 row.optString("created_at"), row.optString("message_type", "text"),
-                row.optString("media_url").takeIf { it.isNotBlank() }?.let { createSignedMediaUrl("orra-chat-media", it) },
+                row.optString("media_url").takeIf { it.isNotBlank() }?.let { path ->
+                    runCatching { createSignedMediaUrl("orra-chat-media", path) }
+                        .onFailure { android.util.Log.w("ORRA", "Could not sign media $path", it) }
+                        .getOrNull()
+                },
                 row.optString("edited_at").takeIf { it.isNotBlank() }, deleted, senderNames[sender].orEmpty(), receiptStatus)
         }
     }
@@ -589,7 +603,7 @@ class SupabaseChatClient(
     fun uploadMedia(bucket: String, file: File, objectPath: String, mimeType: String): String {
         val maxBytes = if (bucket == "orra-profiles") 5L * 1024L * 1024L else 100L * 1024L * 1024L
         require(file.length() in 1..maxBytes) { "File must be between 1 byte and ${maxBytes / (1024L * 1024L)} MB." }
-        val safePath = objectPath.split("/").joinToString("/") { encode(it) }
+        val safePath = encodePath(objectPath)
         val connection = openHttp(URL(projectUrl.trimEnd('/') + "/storage/v1/object/" + bucket + "/" + safePath))
         try {
             connection.requestMethod = "POST"; connection.doOutput = true
@@ -615,10 +629,21 @@ class SupabaseChatClient(
                 if (cached.second > now + 60000L) return cached.first
             }
         }
-        val response = JSONObject(request("/storage/v1/object/sign/" + bucket + "/" +
-            objectPath.split("/").joinToString("/") { encode(it) }, "POST", JSONObject().put("expiresIn", 3600)))
-        val signed = response.optString("signedURL")
-        val fullUrl = if (signed.startsWith("http")) signed else projectUrl.trimEnd('/') + signed
+        fun signWith(encodedPath: String): String {
+            val response = JSONObject(request("/storage/v1/object/sign/" + bucket + "/" + encodedPath,
+                "POST", JSONObject().put("expiresIn", 3600)))
+            val signed = response.optString("signedURL")
+            if (signed.isBlank()) throw IllegalStateException("Storage returned no signed URL.")
+            return if (signed.startsWith("http")) signed else projectUrl.trimEnd('/') + signed
+        }
+        val fullUrl = try {
+            signWith(encodePath(objectPath))
+        } catch (first: IllegalStateException) {
+            // Files uploaded by older builds with spaces in their names were stored with a literal '+'.
+            val legacy = legacyEncodePath(objectPath)
+            if (legacy == encodePath(objectPath)) throw first
+            signWith(legacy)
+        }
         synchronized(signedUrlCache) { signedUrlCache[cacheKey] = fullUrl to (now + 3300000L) }
         return fullUrl
     }
