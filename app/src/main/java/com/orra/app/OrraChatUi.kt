@@ -431,7 +431,8 @@ fun OrraFullScreenDialog(
     text: @Composable () -> Unit,
     confirmButton: @Composable () -> Unit,
     dismissButton: @Composable () -> Unit = {},
-    header: @Composable () -> Unit = {}
+    header: @Composable () -> Unit = {},
+    status: String = ""
 ) {
     Dialog(onDismissRequest = onDismissRequest, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -447,6 +448,7 @@ fun OrraFullScreenDialog(
                     header()
                     text()
                 }
+                if (status.isNotBlank()) Text(status, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { dismissButton(); confirmButton() }
             }
         }

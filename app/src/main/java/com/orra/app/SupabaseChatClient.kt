@@ -128,7 +128,7 @@ class SupabaseChatClient(
                     else -> "Could not connect to ORRA right now. Please try again."
                 }
                 android.util.Log.w("ORRA", "Request failed (HTTP $code): " + detail.take(300))
-                val extra = if (path.startsWith("/rest/v1/messages")) " [HTTP $code: " + detail.take(90) + "]" else " [HTTP $code]"
+                val extra = " [HTTP $code: " + detail.replace("\n", " ").take(110) + "]"
                 throw IllegalStateException(safeMessage + extra)
             }
             return response
@@ -256,13 +256,19 @@ class SupabaseChatClient(
     }
 
     fun loadMessages(conversationId: String): List<OrraChatMessage> {
-        val rows = JSONArray(request(
-            "/rest/v1/messages?select=id,sender_id,body,created_at,message_type,media_url,edited_at,deleted_for_everyone&conversation_id=eq." +
-                encode(conversationId) + "&order=created_at.asc&limit=250"
-        ))
-        val deletions = JSONArray(request(
-            "/rest/v1/message_deletions?select=message_id&user_id=eq." + encode(currentUserId.orEmpty())
-        ))
+        val rows = try {
+            JSONArray(request(
+                "/rest/v1/messages?select=id,sender_id,body,created_at,message_type,media_url,edited_at,deleted_for_everyone&conversation_id=eq." +
+                    encode(conversationId) + "&order=created_at.asc&limit=250"
+            ))
+        } catch (e: IllegalStateException) {
+            // Older database without the newer columns: still show the conversation.
+            JSONArray(request("/rest/v1/messages?select=id,sender_id,body,created_at&conversation_id=eq." +
+                encode(conversationId) + "&order=created_at.asc&limit=250"))
+        }
+        val deletions = runCatching {
+            JSONArray(request("/rest/v1/message_deletions?select=message_id&user_id=eq." + encode(currentUserId.orEmpty())))
+        }.getOrDefault(JSONArray())
         val hidden = (0 until deletions.length()).mapNotNull { deletions.optJSONObject(it)?.optString("message_id") }.toSet()
         val senderIds = (0 until rows.length()).mapNotNull { rows.optJSONObject(it)?.optString("sender_id") }.distinct()
         val senderNames = mutableMapOf<String, String>()

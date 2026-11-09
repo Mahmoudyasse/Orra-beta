@@ -34,6 +34,7 @@ object OrraLang {
 
     private val dictionaries: Map<String, Map<String, String>> = mapOf(
         "en" to mapOf(
+            "sent_refresh_failed" to "Sent, but the chat could not refresh:",
             "broadcast" to "Broadcast messages",
             "broadcast_sub" to "Send one message to many people",
             "broadcast_note" to "Create a list and send one message to everyone on it. Each person gets it as a normal private message.",
@@ -343,6 +344,7 @@ object OrraLang {
             "wrong_password" to "Wrong password.",
         ),
         "ar" to mapOf(
+            "sent_refresh_failed" to "تم الإرسال لكن تعذر تحديث المحادثة:",
             "broadcast" to "رسائل جماعية",
             "broadcast_sub" to "أرسل رسالة واحدة لعدة أشخاص",
             "broadcast_note" to "أنشئ قائمة وأرسل رسالة واحدة لكل من فيها. يستلمها كل شخص كرسالة خاصة عادية.",
@@ -652,6 +654,7 @@ object OrraLang {
             "wrong_password" to "كلمة السر خاطئة.",
         ),
         "fr" to mapOf(
+            "sent_refresh_failed" to "Envoyé, mais la discussion n'a pas pu s'actualiser :",
             "broadcast" to "Messages diffusés",
             "broadcast_sub" to "Envoyer un message à plusieurs personnes",
             "broadcast_note" to "Créez une liste et envoyez un message à tous. Chacun le reçoit comme un message privé.",
@@ -961,6 +964,7 @@ object OrraLang {
             "wrong_password" to "Mot de passe incorrect.",
         ),
         "es" to mapOf(
+            "sent_refresh_failed" to "Enviado, pero no se pudo actualizar el chat:",
             "broadcast" to "Mensajes masivos",
             "broadcast_sub" to "Un mensaje para varias personas",
             "broadcast_note" to "Crea una lista y envía un mensaje a todos. Cada persona lo recibe como mensaje privado.",

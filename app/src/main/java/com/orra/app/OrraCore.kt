@@ -597,3 +597,19 @@ object OrraAccess {
     fun setScale(context: Context, value: Float) { scale.value = value; OrraPrefs.get(context).edit().putFloat("text_scale", value).apply() }
     fun setHighContrast(context: Context, value: Boolean) { highContrast.value = value; OrraPrefs.get(context).edit().putBoolean("high_contrast", value).apply() }
 }
+
+object OrraImage {
+    /** Re-encodes any picked image (HEIC, GIF, PNG ...) as a JPEG of at most 1600 px, ready for upload. */
+    fun toJpegFile(context: Context, uri: Uri): File {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        var sample = 1
+        while (bounds.outWidth / sample > 1600 || bounds.outHeight / sample > 1600) sample *= 2
+        val bitmap = context.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+        } ?: throw IllegalStateException("This image could not be read.")
+        val out = File(context.cacheDir, "orra_upload_" + System.currentTimeMillis() + ".jpg")
+        out.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 88, it) }
+        return out
+    }
+}

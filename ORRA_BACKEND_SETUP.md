@@ -1,5 +1,9 @@
 # ORRA backend setup
 
+## Easiest: run `supabase/orra_all_in_one.sql` once
+
+It contains every migration below, in order, and is safe to run again. Use the numbered list only if you prefer to run them one by one.
+
 ## Apply SQL migrations in this exact order
 
 Run each file in the Supabase SQL Editor, once, in this order:

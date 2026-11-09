@@ -331,8 +331,8 @@ fun ChatScreen() {
 
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null && client != null) runTask {
-            val file = withContext(Dispatchers.IO) { copyUriToCache(context, uri) }
-            val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+            val file = withContext(Dispatchers.IO) { OrraImage.toJpegFile(context, uri) }
+            val mime = "image/jpeg"
             val path = withContext(Dispatchers.IO) {
                 client.uploadMedia("orra-profiles", file, "$userId/avatar_${System.currentTimeMillis()}.jpg", mime)
             }
@@ -343,8 +343,8 @@ fun ChatScreen() {
     }
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null && client != null) runTask {
-            val file = withContext(Dispatchers.IO) { copyUriToCache(context, uri) }
-            val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+            val file = withContext(Dispatchers.IO) { OrraImage.toJpegFile(context, uri) }
+            val mime = "image/jpeg"
             val path = withContext(Dispatchers.IO) {
                 client.uploadMedia("orra-profiles", file, "$userId/cover_${System.currentTimeMillis()}.jpg", mime)
             }
@@ -1210,7 +1210,8 @@ fun ChatScreen() {
                                     messages = withContext(Dispatchers.IO) { api.loadOrraAiMessages() }
                                 } else {
                                     withContext(Dispatchers.IO) { api.sendMessage(active.id, body) }
-                                    messages = withContext(Dispatchers.IO) { api.loadMessages(active.id) }
+                                    runCatching { messages = withContext(Dispatchers.IO) { api.loadMessages(active.id) } }
+                                        .onFailure { error = tr("sent_refresh_failed") + " " + (it.message ?: "") }
                                 }
                                 OrraSfx.play(context, "send")
                             } catch (e: Exception) {
@@ -1445,6 +1446,7 @@ fun ChatScreen() {
     if (showProfile) {
         OrraFullScreenDialog(
             onDismissRequest = { showProfile = false },
+            status = error,
             header = {
                 Box(Modifier.fillMaxWidth().height(230.dp)) {
                     if (!coverPreview.isNullOrBlank()) AsyncImage(coverPreview, null, Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(20.dp)),
