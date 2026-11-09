@@ -21,7 +21,8 @@ data class OrraChatConversation(
 data class OrraChatMessage(
     val id: String, val senderId: String, val body: String, val createdAt: String,
     val type: String = "text", val mediaUrl: String? = null, val editedAt: String? = null,
-    val deletedForEveryone: Boolean = false, val senderUsername: String = "", val receiptStatus: String? = null
+    val deletedForEveryone: Boolean = false, val senderUsername: String = "", val receiptStatus: String? = null,
+    val reactions: List<Pair<String, Int>> = emptyList(), val myReaction: String? = null
 )
 data class OrraUserPresence(val userId: String, val online: Boolean, val dnd: Boolean, val typing: Boolean, val typingConversation: String?, val lastSeen: String)
 data class OrraChatProfile(
@@ -37,6 +38,9 @@ class SupabaseChatClient(
     private val currentUserId: String? = null
 ) {
     companion object {
+        private val ioPool = java.util.concurrent.Executors.newFixedThreadPool(4) { r ->
+            Thread(r, "orra-io").apply { isDaemon = true }
+        }
         const val PREFS = "orra_chat_backend"
         const val DEFAULT_PROJECT_URL = "https://bmehobgcdjtnbwsdgjxg.supabase.co"
         const val DEFAULT_PUBLISHABLE_KEY = "sb_publishable_ngdm1off2Dj6j7iDHYboHw_gjAVL8UB"
@@ -273,10 +277,23 @@ class SupabaseChatClient(
             JSONArray(request("/rest/v1/messages?select=id,sender_id,body,created_at&conversation_id=eq." +
                 encode(conversationId) + "&order=created_at.asc&limit=250"))
         }
-        val deletions = runCatching {
-            JSONArray(request("/rest/v1/message_deletions?select=message_id&user_id=eq." + encode(currentUserId.orEmpty())))
-        }.getOrDefault(JSONArray())
-        val hidden = (0 until deletions.length()).mapNotNull { deletions.optJSONObject(it)?.optString("message_id") }.toSet()
+        val ids = (0 until rows.length()).mapNotNull { rows.optJSONObject(it)?.optString("id")?.takeIf { id -> id.isNotBlank() } }
+        val idList = ids.joinToString(",") { encode(it) }
+        // Independent lookups run in parallel so the chat opens and refreshes quickly.
+        val deletionsFuture = ioPool.submit(java.util.concurrent.Callable<JSONArray> {
+            runCatching { JSONArray(request("/rest/v1/message_deletions?select=message_id&user_id=eq." + encode(currentUserId.orEmpty()))) }
+                .getOrDefault(JSONArray())
+        })
+        val receiptsFuture = ioPool.submit(java.util.concurrent.Callable<JSONArray> {
+            if (ids.isEmpty()) JSONArray() else runCatching {
+                JSONArray(request("/rest/v1/message_receipts?select=message_id,delivered_at,read_at&message_id=in.($idList)"))
+            }.getOrDefault(JSONArray())
+        })
+        val reactionsFuture = ioPool.submit(java.util.concurrent.Callable<JSONArray> {
+            if (ids.isEmpty()) JSONArray() else runCatching {
+                JSONArray(request("/rest/v1/message_reactions?select=message_id,user_id,emoji&message_id=in.($idList)"))
+            }.getOrDefault(JSONArray())
+        })
         val senderIds = (0 until rows.length()).mapNotNull { rows.optJSONObject(it)?.optString("sender_id") }.distinct()
         val senderNames = mutableMapOf<String, String>()
         senderIds.forEach { senderId ->
@@ -291,13 +308,16 @@ class SupabaseChatClient(
             }
             senderNames[senderId] = resolvedName
         }
-        val receiptRows = runCatching {
-            val ids = (0 until rows.length()).mapNotNull { rows.optJSONObject(it)?.optString("id")?.takeIf { id -> id.isNotBlank() } }
-            if (ids.isEmpty()) JSONArray() else JSONArray(request(
-                "/rest/v1/message_receipts?select=message_id,delivered_at,read_at&message_id=in.(" +
-                    ids.joinToString(",") { encode(it) } + ")"
-            ))
-        }.getOrDefault(JSONArray())
+        val deletions = deletionsFuture.get()
+        val hidden = (0 until deletions.length()).mapNotNull { deletions.optJSONObject(it)?.optString("message_id") }.toSet()
+        val receiptRows = receiptsFuture.get()
+        val reactionRows = reactionsFuture.get()
+        val reactionsByMessage = mutableMapOf<String, MutableList<Pair<String, String>>>()
+        for (i in 0 until reactionRows.length()) {
+            val reaction = reactionRows.optJSONObject(i) ?: continue
+            reactionsByMessage.getOrPut(reaction.optString("message_id")) { mutableListOf() }
+                .add(reaction.optString("user_id") to reaction.optString("emoji"))
+        }
         val receiptsByMessage = mutableMapOf<String, MutableList<JSONObject>>()
         for (i in 0 until receiptRows.length()) {
             val receipt = receiptRows.optJSONObject(i) ?: continue
@@ -311,6 +331,10 @@ class SupabaseChatClient(
             val sender = row.optString("sender_id")
             val messageId = row.optString("id")
             val recipients = receiptsByMessage[messageId].orEmpty()
+            val messageReactions = reactionsByMessage[messageId].orEmpty()
+            val reactionCounts = messageReactions.groupingBy { it.second }.eachCount()
+                .entries.sortedByDescending { it.value }.map { it.key to it.value }
+            val myReaction = messageReactions.firstOrNull { it.first == currentUserId }?.second
             val receiptStatus = if (sender != currentUserId) null else when {
                 recipients.isEmpty() -> "sent"
                 recipients.all { it.optString("read_at").isNotBlank() } -> "read"
@@ -325,7 +349,8 @@ class SupabaseChatClient(
                         .onFailure { android.util.Log.w("ORRA", "Could not sign media $path", it) }
                         .getOrNull()
                 },
-                row.optString("edited_at").takeIf { it.isNotBlank() }, deleted, senderNames[sender].orEmpty(), receiptStatus)
+                row.optString("edited_at").takeIf { it.isNotBlank() }, deleted, senderNames[sender].orEmpty(), receiptStatus,
+                reactionCounts, myReaction)
         }
     }
 
@@ -362,6 +387,17 @@ class SupabaseChatClient(
     fun markConversationDelivered(conversationId: String) {
         request("/rest/v1/rpc/orra_mark_conversation_delivered", "POST",
             JSONObject().put("target_conversation", conversationId))
+    }
+
+    /** Marks every pending message addressed to me as delivered (I am online in the app). */
+    fun markAllDelivered() {
+        request("/rest/v1/rpc/orra_mark_all_delivered", "POST", JSONObject())
+    }
+
+    /** Sets, changes or (when the same emoji is sent again) removes my reaction on a message. */
+    fun setReaction(messageId: String, emoji: String) {
+        request("/rest/v1/rpc/orra_set_reaction", "POST",
+            JSONObject().put("target_message", messageId).put("new_emoji", emoji))
     }
 
     fun markConversationRead(conversationId: String) {
@@ -489,7 +525,7 @@ class SupabaseChatClient(
                 val id = row.optString("user_id")
                 val lastSeen = row.optString("last_seen")
                 val fresh = runCatching {
-                    java.time.Instant.parse(lastSeen).isAfter(java.time.Instant.now().minusSeconds(45))
+                    java.time.Instant.parse(lastSeen).isAfter(java.time.Instant.now().minusSeconds(90))
                 }.getOrDefault(false)
                 put(id, OrraUserPresence(id, row.optBoolean("is_online") && fresh, row.optBoolean("is_dnd"),
                     row.optBoolean("is_typing") && fresh, row.optString("typing_conversation").takeIf { it.isNotBlank() }, lastSeen))

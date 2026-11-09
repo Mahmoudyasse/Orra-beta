@@ -25,6 +25,7 @@ class OrraVoiceRecorder(private val outputDir: File) {
     }
 
     @Volatile private var recording = false
+    @Volatile private var paused = false
     private var audioRecord: AudioRecord? = null
     private var noise: NoiseSuppressor? = null
     private var echo: AcousticEchoCanceler? = null
@@ -52,6 +53,7 @@ class OrraVoiceRecorder(private val outputDir: File) {
         try { rec.startRecording() } catch (_: Exception) {
             release(); onError("Could not start microphone recording."); return
         }
+        paused = false
         recording = true
         Thread {
             val raw = File(outputDir, "orra_voice_" + System.currentTimeMillis() + ".pcm")
@@ -62,7 +64,7 @@ class OrraVoiceRecorder(private val outputDir: File) {
                     val buffer = ByteArray(4096)
                     while (recording) {
                         val n = rec.read(buffer, 0, buffer.size)
-                        if (n > 0) { stream.write(buffer, 0, n); size += n }
+                        if (n > 0) { if (!paused) { stream.write(buffer, 0, n); size += n } }
                         else if (n < 0) break
                     }
                 }
@@ -89,6 +91,9 @@ class OrraVoiceRecorder(private val outputDir: File) {
             } finally { release() }
         }.apply { name = "OrraVoiceRecorder"; start() }
     }
+
+    fun pause() { paused = true }
+    fun resume() { paused = false }
 
     fun stop() {
         recording = false

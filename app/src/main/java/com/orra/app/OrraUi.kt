@@ -28,6 +28,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.produceState
 
 @Composable
 fun OrraUnlockDialog(title: String, lockKey: String, onDismiss: () -> Unit, allowReset: Boolean = true, onUnlocked: () -> Unit) {
@@ -113,9 +116,12 @@ fun rememberOrraWallpaperModifier(): Modifier? {
     val context = LocalContext.current
     val version = OrraWallpaper.version.intValue
     val name = remember(version) { OrraWallpaper.current(context) }
-    val bitmap = remember(version, name) {
-        if (name == "Custom") runCatching { BitmapFactory.decodeFile(OrraWallpaper.file(context).path)?.asImageBitmap() }.getOrNull() else null
+    val loaded by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
+        initialValue = if (name == "Custom") OrraWallpaperCache.peek()?.asImageBitmap() else null, name, version
+    ) {
+        value = if (name == "Custom") withContext(Dispatchers.IO) { OrraWallpaperCache.load(context)?.asImageBitmap() } else null
     }
+    val bitmap = loaded
     return when (name) {
         "Midnight" -> Modifier.background(Brush.verticalGradient(listOf(Color(0xFF04060B), Color(0xFF111627))))
         "Ocean" -> Modifier.background(Brush.verticalGradient(listOf(Color(0xFF06141F), Color(0xFF0E3A4F))))

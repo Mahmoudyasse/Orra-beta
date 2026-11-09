@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
         OrraSecurity.load(this)
         OrraAccess.load(this)
         OrraSfx.init(this)
+        Thread { runCatching { OrraWallpaperCache.load(applicationContext) } }.start()
         consumeAuthCallback(intent)
         setContent {
             OrraTheme {
@@ -103,7 +104,12 @@ class MainActivity : ComponentActivity() {
                         androidx.compose.ui.platform.LocalDensity.current.fontScale * OrraAccess.scale.value)
                 ) {
                     Box(Modifier.fillMaxSize()) {
-                        if (OrraInternetCallState.callId != null) OrraInternetCallScreen() else if (OrraCallState.activeCall != null) InCallScreen() else OrraApp()
+                        OrraApp()
+                        if (OrraInternetCallState.callId != null) {
+                            androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = androidx.compose.material3.MaterialTheme.colorScheme.background) { OrraInternetCallScreen() }
+                        } else if (OrraCallState.activeCall != null) {
+                            androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = androidx.compose.material3.MaterialTheme.colorScheme.background) { InCallScreen() }
+                        }
                         OrraEyeOverlay()
                         OrraSecurityLayer()
                     }

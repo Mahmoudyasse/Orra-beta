@@ -192,7 +192,7 @@ object OrraWallpaper {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
         var sample = 1
-        while (bounds.outWidth / sample > 2000 || bounds.outHeight / sample > 2000) sample *= 2
+        while (bounds.outWidth / sample > 1280 || bounds.outHeight / sample > 1280) sample *= 2
         val bitmap = resolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
         } ?: return false
@@ -200,6 +200,22 @@ object OrraWallpaper {
         setPreset(context, "Custom")
         true
     }.getOrDefault(false)
+}
+
+/** Keeps the decoded wallpaper in memory so chats open instantly. */
+object OrraWallpaperCache {
+    @Volatile private var key = ""
+    @Volatile private var bitmap: Bitmap? = null
+    fun peek(): Bitmap? = bitmap
+    fun load(context: Context): Bitmap? {
+        val f = OrraWallpaper.file(context)
+        val k = f.lastModified().toString() + ":" + f.length()
+        val cached = bitmap
+        if (k == key && cached != null) return cached
+        val decoded = runCatching { BitmapFactory.decodeFile(f.path) }.getOrNull()
+        key = k; bitmap = decoded
+        return decoded
+    }
 }
 
 data class OrraSound(val key: String, val label: String, val resName: String)

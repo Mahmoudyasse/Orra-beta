@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Notifications
@@ -133,7 +134,8 @@ data class OrraMenuItem(val label: String, val icon: ImageVector, val danger: Bo
 @Composable
 fun OrraChatTopBar(
     title: String, status: String, statusColor: Color, avatarUrl: String?,
-    onBack: () -> Unit, onOpenProfile: () -> Unit, onCall: (() -> Unit)?, menu: List<OrraMenuItem>
+    onBack: () -> Unit, onOpenProfile: () -> Unit, onCall: (() -> Unit)?, menu: List<OrraMenuItem>,
+    online: Boolean = false
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val pill = MaterialTheme.colorScheme.surfaceVariant
@@ -144,7 +146,11 @@ fun OrraChatTopBar(
         }
         Surface(modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(30.dp), color = pill, onClick = onOpenProfile) {
             Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                OrraAvatar(title, avatarUrl, 38.dp)
+                Box {
+                    OrraAvatar(title, avatarUrl, 38.dp)
+                    if (online) Surface(modifier = Modifier.align(Alignment.BottomEnd).size(12.dp), shape = CircleShape,
+                        color = Color(0xFF31D158), border = androidx.compose.foundation.BorderStroke(2.dp, pill)) {}
+                }
                 Column(Modifier.padding(start = 10.dp)) {
                     Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(status, fontSize = 11.sp, color = statusColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -313,13 +319,17 @@ private fun ProfileInfo(label: String, value: String) {
 
 /** Voice message recording bar: timer, delete and send. */
 @Composable
-fun OrraRecordingBar(seconds: Int, onCancel: () -> Unit, onSend: () -> Unit) {
+fun OrraRecordingBar(seconds: Int, onCancel: () -> Unit, onSend: () -> Unit, paused: Boolean = false, onTogglePause: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Surface(modifier = Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
             Row(Modifier.padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Surface(modifier = Modifier.size(10.dp), shape = CircleShape, color = MaterialTheme.colorScheme.error) {}
                 Text(String.format("%d:%02d", seconds / 60, seconds % 60), Modifier.padding(start = 10.dp), fontWeight = FontWeight.SemiBold)
-                Text(tr("recording"), Modifier.weight(1f).padding(start = 10.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text(if (paused) "⏸" else tr("recording"), Modifier.weight(1f).padding(start = 10.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                if (onTogglePause != null) IconButton(onClick = onTogglePause) {
+                    Icon(if (paused) Icons.Default.Mic else Icons.Default.Pause,
+                        contentDescription = null)
+                }
                 IconButton(onClick = onCancel) { Icon(Icons.Default.Delete, contentDescription = tr("cancel_recording"), tint = MaterialTheme.colorScheme.error) }
             }
         }

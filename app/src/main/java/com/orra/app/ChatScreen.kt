@@ -64,6 +64,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.Search
@@ -277,8 +279,11 @@ fun ChatScreen() {
         mutableStateOf(prefs.getBoolean("chat_muted_${selected?.id}", false))
     }
     var recording by remember { mutableStateOf(false) }
+    var recordPaused by remember { mutableStateOf(false) }
     var voiceStatus by remember { mutableStateOf("") }
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
+    var playingId by remember { mutableStateOf<String?>(null) }
+    var audioPlaying by remember { mutableStateOf(false) }
     val recorder = remember { OrraVoiceRecorder(context.cacheDir) }
     val clipboard = LocalClipboardManager.current
     val startCellularCall = rememberOrraCallAction()
@@ -304,6 +309,15 @@ fun ChatScreen() {
         val active = selected ?: return
         val api = client ?: return
         runTask { messages = withContext(Dispatchers.IO) { api.loadMessages(active.id) } }
+    }
+
+    fun reactTo(message: OrraChatMessage, emoji: String) {
+        val active = selected ?: return
+        val api = client ?: return
+        runTask {
+            withContext(Dispatchers.IO) { api.setReaction(message.id, emoji) }
+            messages = withContext(Dispatchers.IO) { api.loadMessages(active.id) }
+        }
     }
 
     BackHandler(enabled = selected != null || showProfile || showGroup || showChatOptions || selectedMessage != null || showAttachmentMenu || showContactShare) {
@@ -488,10 +502,12 @@ fun ChatScreen() {
             val api = client
             if (active != null && api != null) {
                 recording = true
+                recordPaused = false
                 voiceStatus = "Recording with available Android voice processing…"
                 recorder.start(
                     onComplete = { file ->
                         recording = false
+                        recordPaused = false
                         if (cancelVoice) { cancelVoice = false; file.delete(); voiceStatus = tr("recording_cancelled") } else scope.launch {
                             runCatching {
                                 val path = withContext(Dispatchers.IO) {
@@ -505,7 +521,7 @@ fun ChatScreen() {
                             file.delete()
                         }
                     },
-                    onError = { recording = false; voiceStatus = it }
+                    onError = { recording = false; recordPaused = false; voiceStatus = it }
                 )
             }
         } else voiceStatus = "Microphone permission denied"
@@ -556,7 +572,8 @@ fun ChatScreen() {
                         if (activeConversation.isAi) {
                             messages = withContext(Dispatchers.IO) { client.loadOrraAiMessages() }
                         } else {
-                            messages = withContext(Dispatchers.IO) { client.loadMessages(activeConversation.id) }
+                            val loadedMessages = withContext(Dispatchers.IO) { client.loadMessages(activeConversation.id) }
+                            if (loadedMessages != messages) messages = loadedMessages
                             runCatching {
                                 withContext(Dispatchers.IO) { client.markConversationDelivered(activeConversation.id) }
                                 delay(450)
@@ -574,6 +591,7 @@ fun ChatScreen() {
         if (signedIn && client != null) {
             while (true) {
                 runCatching { withContext(Dispatchers.IO) { client.updatePresence(OrraPrivacy.shareOnline(context), dndEnabled, false, null) } }
+                if (OrraPrivacy.shareOnline(context)) runCatching { withContext(Dispatchers.IO) { client.markAllDelivered() } }
                 delay(OrraPower.pollDelay(context, 12000))
             }
         }
@@ -683,7 +701,7 @@ fun ChatScreen() {
 
     LaunchedEffect(selected?.id) { lastSeenId = null }
     LaunchedEffect(recording) {
-        if (recording) { recordSeconds = 0; while (true) { delay(1000); recordSeconds++ } }
+        if (recording) { recordSeconds = 0; while (true) { delay(1000); if (!recordPaused) recordSeconds++ } }
     }
     LaunchedEffect(selected?.peerUserId, client) {
         peerProfile = null
@@ -1046,6 +1064,7 @@ fun ChatScreen() {
             }
             OrraChatTopBar(
                 title = selected!!.username, status = headerStatus,
+                online = !selected!!.isGroup && !selected!!.isAi && activePeerPresence?.online == true,
                 statusColor = if (activePeerPresence?.online == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 avatarUrl = peerProfile?.avatarUrl,
                 onBack = { selected = null; messages = emptyList(); error = ""; showEmoji = false },
@@ -1116,23 +1135,39 @@ fun ChatScreen() {
                                 } else when (message.type) {
                                     "image" -> if (!message.mediaUrl.isNullOrBlank()) {
                                         AsyncImage(message.mediaUrl, contentDescription = "Shared image",
-                                            modifier = Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(12.dp)))
+                                            modifier = Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(12.dp))
+                                                .clickable { viewerImage = message.mediaUrl },
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop)
                                     } else Text(tr("s_0b73346c"))
                                     "audio" -> Row(verticalAlignment = Alignment.CenterVertically) {
                                         IconButton(onClick = {
-                                            runCatching {
+                                            val current = player
+                                            if (playingId == message.id && current != null) {
+                                                runCatching { if (audioPlaying) current.pause() else current.start() }
+                                                audioPlaying = !audioPlaying
+                                            } else runCatching {
                                                 player?.release()
+                                                playingId = message.id
+                                                audioPlaying = true
                                                 player = MediaPlayer().apply {
                                                     setDataSource(message.mediaUrl ?: throw IllegalStateException("Voice file is not available."))
                                                     setOnPreparedListener { it.start() }
-                                                    setOnErrorListener { _, _, _ -> voiceStatus = "Could not play this voice message"; true }
+                                                    setOnCompletionListener { playingId = null; audioPlaying = false }
+                                                    setOnErrorListener { _, _, _ ->
+                                                        voiceStatus = "Could not play this voice message"
+                                                        playingId = null; audioPlaying = false; true
+                                                    }
                                                     prepareAsync()
                                                 }
                                             }.onFailure {
                                                 android.util.Log.w("ORRA", "Voice playback failed", it)
                                                 voiceStatus = "Could not play this voice message"
+                                                playingId = null; audioPlaying = false
                                             }
-                                        }) { Icon(Icons.Default.Mic, contentDescription = "Play voice message") }
+                                        }) {
+                                            Icon(if (playingId == message.id && audioPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                contentDescription = "Play voice message")
+                                        }
                                         Text(tr("s_a716aa47"))
                                     }
                                     "file", "video" -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1147,7 +1182,9 @@ fun ChatScreen() {
                                             }) { Text(tr("s_191499bc")) }
                                         }
                                     }
-                                    "location" -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    "location" -> Column(Modifier.clickable {
+                                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(message.body.substringAfterLast("\n"))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                                    }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Text(tr("s_cec99c77"), fontWeight = FontWeight.SemiBold)
                                         Text(message.body, style = MaterialTheme.typography.bodySmall)
                                         TextButton(onClick = {
@@ -1170,6 +1207,21 @@ fun ChatScreen() {
                                         val savedName = Uri.parse(message.mediaUrl).lastPathSegment ?: "orra_file"
                                         voiceStatus = if (OrraMedia.save(context, message.mediaUrl!!, savedName)) tr("saved_downloads") else tr("save_blocked")
                                     }) { Text(tr("save_to_device")) }
+                                }
+                                if (message.reactions.isNotEmpty()) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        message.reactions.forEach { (emoji, count) ->
+                                            Surface(
+                                                modifier = Modifier.clickable { reactTo(message, emoji) },
+                                                shape = RoundedCornerShape(12.dp),
+                                                color = if (emoji == message.myReaction) MaterialTheme.colorScheme.primary.copy(alpha = 0.40f)
+                                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+                                            ) {
+                                                Text(if (count > 1) "$emoji $count" else emoji,
+                                                    Modifier.padding(horizontal = 7.dp, vertical = 2.dp), fontSize = 13.sp)
+                                            }
+                                        }
+                                    }
                                 }
                                 if (message.editedAt != null) Text(tr("s_67ed6ddb"), style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1194,7 +1246,11 @@ fun ChatScreen() {
             }
             if (showEmoji) OrraEmojiPanel { messageText += it }
             if (recording) OrraRecordingBar(recordSeconds, onCancel = { cancelVoice = true; recorder.stop() },
-                onSend = { recorder.stop(); voiceStatus = "Finishing voice message…" }) else OrraComposerBar(
+                onSend = { recorder.stop(); voiceStatus = "Finishing voice message…" },
+                paused = recordPaused,
+                onTogglePause = {
+                    if (recordPaused) { recorder.resume(); recordPaused = false } else { recorder.pause(); recordPaused = true }
+                }) else OrraComposerBar(
                 text = messageText, onText = { messageText = it },
                 hint = if (selected!!.isAi) "Message ORRA AI…" else tr("hint_message"),
                 canAttach = !selected!!.isAi, recording = recording, busy = busy,
@@ -1334,7 +1390,11 @@ fun ChatScreen() {
 
     if (showWallpaper) {
         val wallpaperPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-            if (uri != null) scope.launch { withContext(Dispatchers.IO) { OrraWallpaper.setCustom(context, uri) } }
+            if (uri != null) scope.launch {
+                withContext(Dispatchers.IO) { OrraWallpaper.setCustom(context, uri) }
+                chatTheme = "liquid"
+                prefs.edit().putString("chat_theme_${selected?.id}", "liquid").apply()
+            }
         }
         AlertDialog(
             onDismissRequest = { showWallpaper = false },
@@ -1342,7 +1402,11 @@ fun ChatScreen() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OrraWallpaper.presets.forEach { preset ->
-                        TextButton(onClick = { OrraWallpaper.setPreset(context, preset) }) {
+                        TextButton(onClick = {
+                            OrraWallpaper.setPreset(context, preset)
+                            chatTheme = "liquid"
+                            prefs.edit().putString("chat_theme_${selected?.id}", "liquid").apply()
+                        }) {
                             Text((if (OrraWallpaper.current(context) == preset) "✓  " else "") + tr("wp_" + preset.lowercase()))
                         }
                     }
@@ -1691,6 +1755,14 @@ fun ChatScreen() {
             title = { Text(tr("s_04a07156")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (!selected!!.isAi && !message.deletedForEveryone) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            listOf("👍", "❤️", "😂", "😮", "😢", "🙏").forEach { quick ->
+                                Text(quick, fontSize = 28.sp,
+                                    modifier = Modifier.clickable { reactTo(message, quick); selectedMessage = null }.padding(4.dp))
+                            }
+                        }
+                    }
                     if (message.senderId == userId && !message.deletedForEveryone) {
                         if (message.type == "text") {
                             OutlinedTextField(editText, { editText = it }, label = { Text(tr("s_c128557c")) }, maxLines = 4)
